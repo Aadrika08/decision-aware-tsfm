@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Environments
+.venv/
+venv/
+env/
+.python-version
+.env
+.env.*
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+
+# Data and forecast caches — never commit these.
+# Predictions are regenerated from the cache contract, not from git.
+data/
+cache/
+outputs/
+results/
+*.parquet
+*.arrow
+*.feather
+*.nc
+*.npz
+*.h5
+*.hdf5
+*.csv.gz
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
