@@ -1,63 +1,6 @@
 import numpy as np
 from scipy import stats
-
-# ---------------------------------------------------------------
-# TEMP: this is a copy of Dayson's compute_omega, shared via Slack on
-# 09/06/26. His omega.py is not yet pushed to GitHub (checked: not on
-# main, not on any branch, no open PR as of this commit). Replace this
-# block with `from omega import compute_omega` once #1 (K1) lands on
-# main. Do not edit the body below independently of his file -- if a
-# bug is found here, it must be fixed in his source and re-copied, so
-# the two never silently diverge.
-# ---------------------------------------------------------------
-def compute_omega(series: np.ndarray, diffs: bool = False) -> float:
-    """Computes spectral predictability Omega according to paper spec:
-
-    - Subtracts DC component (mean)
-    - Applies Hann taper window
-    - Calculates one-sided PSD over k_bins = floor(t_len/2) bins (DC excluded)
-    - Normalizes spectral entropy H(x) by h_max = log(k_bins)
-    """
-    ts = np.asarray(series, dtype=np.float64)
-    ts = ts[np.isfinite(ts)]
-
-    if len(ts) < 2:
-        return 0.0
-
-    if diffs:
-        ts = np.diff(ts)
-
-    t_len = len(ts)
-    if t_len < 2:
-        return 0.0
-
-    ts_zero_mean = ts - np.mean(ts)
-    hann_window = np.hanning(t_len)
-    tapered_series = ts_zero_mean * hann_window
-
-    fft_vals = np.fft.rfft(tapered_series)
-    fft_no_dc = fft_vals[1:]
-    k_bins = len(fft_no_dc)
-
-    if k_bins < 1:
-        return 0.0
-
-    psd = np.abs(fft_no_dc) ** 2
-    total_power = np.sum(psd)
-    if total_power <= 0:
-        return 0.0
-
-    p = psd / total_power
-    p = p[p > 0]
-
-    spectral_entropy = -np.sum(p * np.log(p))
-    h_max = np.log(k_bins)
-
-    if h_max <= 0:
-        return 0.0
-
-    omega_val = 1.0 - (spectral_entropy / h_max)
-    return float(np.clip(omega_val, 0.0, 1.0))
+from omega import compute_omega
 
 
 # ---------------------------------------------------------------
