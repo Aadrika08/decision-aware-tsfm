@@ -217,7 +217,7 @@ def process_all_gift_eval():
     print(f"\nManifest Generation Complete")
     print(f"Active Series (>=1000 ts): {len(dev_manifest)}")
     print(f"Excluded Series (<1000 ts): {len(excluded_series)}")
-
+   
 
 if __name__ == "__main__":
     process_all_gift_eval()
