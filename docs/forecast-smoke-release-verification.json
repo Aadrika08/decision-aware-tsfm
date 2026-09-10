@@ -1,0 +1,190 @@
+{
+  "verified_at": "2026-09-10T16:11:32.439690+00:00",
+  "tag": "v0.1.0-smoke",
+  "commit": "457dd1d9bd31db5cb539d5778d1ad49a71bc244f",
+  "archive_sha256": "9d2e50d43b7898d88ecbfc70cd3642f0b142eb1155bd1574bf1974c9229a6876",
+  "python": "3.11.9",
+  "platform": "Windows-10-10.0.19045-SP0",
+  "numpy": "1.26.4",
+  "pyarrow": "16.1.0",
+  "verified_jobs": [
+    "bba8f4682879522ed3d7644bfd466151303ada9166ab730d61b2ab412fed0d2f",
+    "e71f11fda091adef52bdea80023459005fbfbe9e14ebebd5b142b195bad238d4",
+    "50b3a478cbebb6d9f1019637a71122603a3026e9a1c7f4cc4a1384bf50024e03",
+    "150dcb4ad1b76a05dedfea72bf1015344a0315825412ec16afa67321e1421581"
+  ],
+  "rows": 96,
+  "quantiles": 11,
+  "run_ledgers": 4,
+  "completed_rerun_ledgers": 1,
+  "unrelated_ledger_jobs": [
+    "34c4642270e75e1627dd3d6ade5bc4190528c167efdeed92fd714a34cbaf77ed"
+  ],
+  "costs": [
+    {
+      "tau": 0.01,
+      "model": "seasonal_naive",
+      "mean_pinball": 0.8233408599972728,
+      "representative_regret": 0.26482270311117206
+    },
+    {
+      "tau": 0.01,
+      "model": "moirai_1.1_R_small",
+      "mean_pinball": 0.5585181568861007,
+      "representative_regret": 0.0
+    },
+    {
+      "tau": 0.05,
+      "model": "seasonal_naive",
+      "mean_pinball": 2.313440202772617,
+      "representative_regret": 0.4903881640235581
+    },
+    {
+      "tau": 0.05,
+      "model": "moirai_1.1_R_small",
+      "mean_pinball": 1.8230520387490587,
+      "representative_regret": 0.0
+    },
+    {
+      "tau": 0.09,
+      "model": "seasonal_naive",
+      "mean_pinball": 2.7768747270226477,
+      "representative_regret": 0.09045693145394296
+    },
+    {
+      "tau": 0.09,
+      "model": "moirai_1.1_R_small",
+      "mean_pinball": 2.6864177955687047,
+      "representative_regret": 0.0
+    },
+    {
+      "tau": 0.25,
+      "model": "seasonal_naive",
+      "mean_pinball": 3.4089169229070344,
+      "representative_regret": 0.0
+    },
+    {
+      "tau": 0.25,
+      "model": "moirai_1.1_R_small",
+      "mean_pinball": 4.8870289127031965,
+      "representative_regret": 1.478111989796162
+    },
+    {
+      "tau": 0.4,
+      "model": "seasonal_naive",
+      "mean_pinball": 4.145971682667731,
+      "representative_regret": 0.0
+    },
+    {
+      "tau": 0.4,
+      "model": "moirai_1.1_R_small",
+      "mean_pinball": 5.69072558283806,
+      "representative_regret": 1.5447539001703294
+    },
+    {
+      "tau": 0.5,
+      "model": "seasonal_naive",
+      "mean_pinball": 4.315343807140986,
+      "representative_regret": 0.0
+    },
+    {
+      "tau": 0.5,
+      "model": "moirai_1.1_R_small",
+      "mean_pinball": 5.514882060388724,
+      "representative_regret": 1.1995382532477379
+    },
+    {
+      "tau": 0.6,
+      "model": "seasonal_naive",
+      "mean_pinball": 4.235314703981081,
+      "representative_regret": 0.0
+    },
+    {
+      "tau": 0.6,
+      "model": "moirai_1.1_R_small",
+      "mean_pinball": 4.8802201976378745,
+      "representative_regret": 0.6449054936567933
+    },
+    {
+      "tau": 0.75,
+      "model": "seasonal_naive",
+      "mean_pinball": 3.618140401939551,
+      "representative_regret": 0.0
+    },
+    {
+      "tau": 0.75,
+      "model": "moirai_1.1_R_small",
+      "mean_pinball": 4.003169963757197,
+      "representative_regret": 0.38502956181764647
+    },
+    {
+      "tau": 0.91,
+      "model": "seasonal_naive",
+      "mean_pinball": 2.822248387793699,
+      "representative_regret": 0.8053793433805301
+    },
+    {
+      "tau": 0.91,
+      "model": "moirai_1.1_R_small",
+      "mean_pinball": 2.016869044413169,
+      "representative_regret": 0.0
+    },
+    {
+      "tau": 0.95,
+      "model": "seasonal_naive",
+      "mean_pinball": 1.9496197828650488,
+      "representative_regret": 0.7211518281698233
+    },
+    {
+      "tau": 0.95,
+      "model": "moirai_1.1_R_small",
+      "mean_pinball": 1.2284679546952255,
+      "representative_regret": 0.0
+    },
+    {
+      "tau": 0.99,
+      "model": "seasonal_naive",
+      "mean_pinball": 0.6172809453368192,
+      "representative_regret": 0.15975167739987312
+    },
+    {
+      "tau": 0.99,
+      "model": "moirai_1.1_R_small",
+      "mean_pinball": 0.4575292679369461,
+      "representative_regret": 0.0
+    }
+  ],
+  "measured_scenarios": {
+    "seasonal_naive": {
+      "measured_jobs": 2,
+      "seconds_per_job": [
+        0.00041544200212229043,
+        0.00031944099464453757
+      ],
+      "mean_seconds_per_job": 0.000367441498383414,
+      "inference_hours_for_1000_identical_jobs": 0.00010206708288428167,
+      "devices": [
+        "cpu"
+      ]
+    },
+    "moirai_1.1_R_small": {
+      "measured_jobs": 2,
+      "seconds_per_job": [
+        0.4340201070008334,
+        0.3946666319970973
+      ],
+      "mean_seconds_per_job": 0.41434336949896533,
+      "inference_hours_for_1000_identical_jobs": 0.11509538041637926,
+      "devices": [
+        "NVIDIA GeForce RTX 4050 Laptop GPU"
+      ]
+    }
+  },
+  "torch_imported": false,
+  "full_grid_budget_status": "blocked_missing_frozen_workload_and_other_model_horizon_timings",
+  "limitations": [
+    "Historical ledgers were checked; inference and resume were not rerun.",
+    "The separate uninterrupted cache is not in this release; exact cross-run equality cannot be independently rechecked from this ZIP.",
+    "Scenarios apply only to the recorded two models, h=24, context=2048 and hardware; exclude loading and I/O."
+  ]
+}
