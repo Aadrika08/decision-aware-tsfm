@@ -31,8 +31,11 @@ Default: `cache/forecast-smoke/`. Each file lives at
 `model=<model>/dataset=ett1_H/<job_id>.parquet`. Share the four files selected by
 `planned_jobs()` together with this checkout and the `runs/` ledgers; do not
 glob stale jobs left by an older script/configuration. Raw predictions are
-ignored by Git. A local `cache/forecast-smoke-sample.zip` contains the measured
-four-job sample and its run ledgers.
+ignored by Git. The [v0.1.0-smoke release](https://github.com/Aadrika08/decision-aware-tsfm/releases/tag/v0.1.0-smoke)
+publishes `forecast-smoke-sample.zip`, containing the measured four-job sample
+and its run ledgers. See [independent release verification](forecast-smoke-verification.md)
+for the checksum, a Windows-compatible verification command, and the precise
+limits of the available evidence.
 
 One row is one forecast step. Identity columns: `job_id`, `dataset`, `config`,
 `series_id`, `model`, `family`, `origin`, `horizon`, `seed`; payload: `step`
