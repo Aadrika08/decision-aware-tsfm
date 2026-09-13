@@ -1,0 +1,13 @@
+metric,comparison,n,spearman_rho,p_value
+sMAPE,zero-shot vs deep,20,-0.417,0.0677
+sMAPE,zero-shot vs statistical,20,-0.123,0.6045
+sMAPE,zero-shot vs pretrained,20,-0.514,0.0203
+MSE,zero-shot vs deep,20,-0.556,0.0108
+MSE,zero-shot vs statistical,20,-0.398,0.0818
+MSE,zero-shot vs pretrained,20,-0.52,0.0187
+MAE,zero-shot vs deep,20,-0.248,0.2915
+MAE,zero-shot vs statistical,20,0.251,0.2855
+MAE,zero-shot vs pretrained,20,-0.405,0.0769
+CRPS,zero-shot vs deep,20,-0.28,0.2323
+CRPS,zero-shot vs statistical,20,0.376,0.1023
+CRPS,zero-shot vs pretrained,20,-0.415,0.0688
