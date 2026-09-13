@@ -1,0 +1,529 @@
+{
+  "rows": 96,
+  "experimental_unit": "one channel, two consecutive validation windows",
+  "oracle": "better fixed representative over both windows, separately at each tau",
+  "costs": [
+    {
+      "tau": 0.01,
+      "model": "seasonal_naive",
+      "mean_pinball": 0.8233408599972728,
+      "representative_regret": 0.26482270311117206
+    },
+    {
+      "tau": 0.01,
+      "model": "moirai_1.1_R_small",
+      "mean_pinball": 0.5585181568861007,
+      "representative_regret": 0.0
+    },
+    {
+      "tau": 0.05,
+      "model": "seasonal_naive",
+      "mean_pinball": 2.313440202772617,
+      "representative_regret": 0.4903881640235581
+    },
+    {
+      "tau": 0.05,
+      "model": "moirai_1.1_R_small",
+      "mean_pinball": 1.8230520387490587,
+      "representative_regret": 0.0
+    },
+    {
+      "tau": 0.09,
+      "model": "seasonal_naive",
+      "mean_pinball": 2.7768747270226477,
+      "representative_regret": 0.09045693145394296
+    },
+    {
+      "tau": 0.09,
+      "model": "moirai_1.1_R_small",
+      "mean_pinball": 2.6864177955687047,
+      "representative_regret": 0.0
+    },
+    {
+      "tau": 0.25,
+      "model": "seasonal_naive",
+      "mean_pinball": 3.4089169229070344,
+      "representative_regret": 0.0
+    },
+    {
+      "tau": 0.25,
+      "model": "moirai_1.1_R_small",
+      "mean_pinball": 4.8870289127031965,
+      "representative_regret": 1.478111989796162
+    },
+    {
+      "tau": 0.4,
+      "model": "seasonal_naive",
+      "mean_pinball": 4.145971682667731,
+      "representative_regret": 0.0
+    },
+    {
+      "tau": 0.4,
+      "model": "moirai_1.1_R_small",
+      "mean_pinball": 5.69072558283806,
+      "representative_regret": 1.5447539001703294
+    },
+    {
+      "tau": 0.5,
+      "model": "seasonal_naive",
+      "mean_pinball": 4.315343807140986,
+      "representative_regret": 0.0
+    },
+    {
+      "tau": 0.5,
+      "model": "moirai_1.1_R_small",
+      "mean_pinball": 5.514882060388724,
+      "representative_regret": 1.1995382532477379
+    },
+    {
+      "tau": 0.6,
+      "model": "seasonal_naive",
+      "mean_pinball": 4.235314703981081,
+      "representative_regret": 0.0
+    },
+    {
+      "tau": 0.6,
+      "model": "moirai_1.1_R_small",
+      "mean_pinball": 4.8802201976378745,
+      "representative_regret": 0.6449054936567933
+    },
+    {
+      "tau": 0.75,
+      "model": "seasonal_naive",
+      "mean_pinball": 3.618140401939551,
+      "representative_regret": 0.0
+    },
+    {
+      "tau": 0.75,
+      "model": "moirai_1.1_R_small",
+      "mean_pinball": 4.003169963757197,
+      "representative_regret": 0.38502956181764647
+    },
+    {
+      "tau": 0.91,
+      "model": "seasonal_naive",
+      "mean_pinball": 2.822248387793699,
+      "representative_regret": 0.8053793433805301
+    },
+    {
+      "tau": 0.91,
+      "model": "moirai_1.1_R_small",
+      "mean_pinball": 2.016869044413169,
+      "representative_regret": 0.0
+    },
+    {
+      "tau": 0.95,
+      "model": "seasonal_naive",
+      "mean_pinball": 1.9496197828650488,
+      "representative_regret": 0.7211518281698233
+    },
+    {
+      "tau": 0.95,
+      "model": "moirai_1.1_R_small",
+      "mean_pinball": 1.2284679546952255,
+      "representative_regret": 0.0
+    },
+    {
+      "tau": 0.99,
+      "model": "seasonal_naive",
+      "mean_pinball": 0.6172809453368192,
+      "representative_regret": 0.15975167739987312
+    },
+    {
+      "tau": 0.99,
+      "model": "moirai_1.1_R_small",
+      "mean_pinball": 0.4575292679369461,
+      "representative_regret": 0.0
+    }
+  ],
+  "measurements": {
+    "seasonal_naive": [
+      {
+        "device": "cpu",
+        "inference_sampling_seconds": 0.00041544200212229043,
+        "peak_gpu_memory_bytes": 0
+      },
+      {
+        "device": "cpu",
+        "inference_sampling_seconds": 0.00031944099464453757,
+        "peak_gpu_memory_bytes": 0
+      }
+    ],
+    "moirai_1.1_R_small": [
+      {
+        "device": "NVIDIA GeForce RTX 4050 Laptop GPU",
+        "inference_sampling_seconds": 0.4340201070008334,
+        "peak_gpu_memory_bytes": 1180523520,
+        "warnings": [
+          "cumsum_cuda_kernel does not have a deterministic implementation, but you set 'torch.use_deterministic_algorithms(True, warn_only=True)'. You can file an issue at https://github.com/pytorch/pytorch/issues to help us prioritize adding deterministic support for this operation. (Triggered internally at ../aten/src/ATen/Context.cpp:83.)"
+        ]
+      },
+      {
+        "device": "NVIDIA GeForce RTX 4050 Laptop GPU",
+        "inference_sampling_seconds": 0.3946666319970973,
+        "peak_gpu_memory_bytes": 1180523520,
+        "warnings": [
+          "cumsum_cuda_kernel does not have a deterministic implementation, but you set 'torch.use_deterministic_algorithms(True, warn_only=True)'. You can file an issue at https://github.com/pytorch/pytorch/issues to help us prioritize adding deterministic support for this operation. (Triggered internally at ../aten/src/ATen/Context.cpp:83.)"
+        ]
+      }
+    ]
+  },
+  "models_imported": false,
+  "projection": {
+    "planned_jobs": 4,
+    "planned_rows": 96,
+    "missing_jobs": 0,
+    "projection": {
+      "seasonal_naive": {
+        "jobs_per_model": 1000,
+        "horizon": 24,
+        "context": 2048,
+        "estimated_inference_sampling_hours": 0.00010206708288428167,
+        "measured_jobs": 2,
+        "devices": [
+          "cpu"
+        ]
+      },
+      "moirai_1.1_R_small": {
+        "jobs_per_model": 1000,
+        "horizon": 24,
+        "context": 2048,
+        "estimated_inference_sampling_hours": 0.11509538041637926,
+        "measured_jobs": 2,
+        "devices": [
+          "NVIDIA GeForce RTX 4050 Laptop GPU"
+        ]
+      }
+    },
+    "limitation": "Same two models, hardware, context and h=24 only; excludes model loading, I/O and unmeasured roster/horizons. Not a full-grid budget confirmation."
+  },
+  "jobs": [
+    {
+      "schema_version": 1,
+      "dataset": "Salesforce/GiftEval",
+      "config": "ett1/H",
+      "source_revision": "30841734ac5cfddbd0c3bad6d09d2b6b32becbb0",
+      "source_sha256": "e4f9484726edb0c28581df4d03b255239bab9b2c0ea14acfdb1fea69d79dd325",
+      "item_id": "item_0",
+      "channel": 0,
+      "series_id": "item_0_dim0",
+      "frequency": "H",
+      "origin": 16412,
+      "origin_timestamp": "2018-05-15T20:00:00",
+      "context_start": 14364,
+      "context_length": 2048,
+      "training_end": 16412,
+      "validation_end": 16460,
+      "horizon": 24,
+      "seed": 42,
+      "model": "seasonal_naive",
+      "family": "classical",
+      "compute_backend": "cpu",
+      "checkpoint": null,
+      "quantiles": [
+        0.01,
+        0.05,
+        0.09,
+        0.25,
+        0.4,
+        0.5,
+        0.6,
+        0.75,
+        0.91,
+        0.95,
+        0.99
+      ],
+      "quantile_method": "numpy.linear",
+      "settings": {
+        "season_length": 24,
+        "residual_lag": 24
+      },
+      "implementation_sha256": "7b3fece73a07fefe361b378502b9448d1bd146469432b9c9f3ec04518af48c80",
+      "environment_sha256": "59df4833a119e7f165e23c97965925bbc22872aa83e1bcf1ce9a98011ffa4da7",
+      "job_id": "bba8f4682879522ed3d7644bfd466151303ada9166ab730d61b2ab412fed0d2f"
+    },
+    {
+      "schema_version": 1,
+      "dataset": "Salesforce/GiftEval",
+      "config": "ett1/H",
+      "source_revision": "30841734ac5cfddbd0c3bad6d09d2b6b32becbb0",
+      "source_sha256": "e4f9484726edb0c28581df4d03b255239bab9b2c0ea14acfdb1fea69d79dd325",
+      "item_id": "item_0",
+      "channel": 0,
+      "series_id": "item_0_dim0",
+      "frequency": "H",
+      "origin": 16436,
+      "origin_timestamp": "2018-05-16T20:00:00",
+      "context_start": 14388,
+      "context_length": 2048,
+      "training_end": 16412,
+      "validation_end": 16460,
+      "horizon": 24,
+      "seed": 43,
+      "model": "seasonal_naive",
+      "family": "classical",
+      "compute_backend": "cpu",
+      "checkpoint": null,
+      "quantiles": [
+        0.01,
+        0.05,
+        0.09,
+        0.25,
+        0.4,
+        0.5,
+        0.6,
+        0.75,
+        0.91,
+        0.95,
+        0.99
+      ],
+      "quantile_method": "numpy.linear",
+      "settings": {
+        "season_length": 24,
+        "residual_lag": 24
+      },
+      "implementation_sha256": "7b3fece73a07fefe361b378502b9448d1bd146469432b9c9f3ec04518af48c80",
+      "environment_sha256": "59df4833a119e7f165e23c97965925bbc22872aa83e1bcf1ce9a98011ffa4da7",
+      "job_id": "e71f11fda091adef52bdea80023459005fbfbe9e14ebebd5b142b195bad238d4"
+    },
+    {
+      "schema_version": 1,
+      "dataset": "Salesforce/GiftEval",
+      "config": "ett1/H",
+      "source_revision": "30841734ac5cfddbd0c3bad6d09d2b6b32becbb0",
+      "source_sha256": "e4f9484726edb0c28581df4d03b255239bab9b2c0ea14acfdb1fea69d79dd325",
+      "item_id": "item_0",
+      "channel": 0,
+      "series_id": "item_0_dim0",
+      "frequency": "H",
+      "origin": 16412,
+      "origin_timestamp": "2018-05-15T20:00:00",
+      "context_start": 14364,
+      "context_length": 2048,
+      "training_end": 16412,
+      "validation_end": 16460,
+      "horizon": 24,
+      "seed": 42,
+      "model": "moirai_1.1_R_small",
+      "family": "tsfm",
+      "compute_backend": "cuda",
+      "checkpoint": "0c24ab99db2c1a70ea2a0fc03bf113329772ac64",
+      "quantiles": [
+        0.01,
+        0.05,
+        0.09,
+        0.25,
+        0.4,
+        0.5,
+        0.6,
+        0.75,
+        0.91,
+        0.95,
+        0.99
+      ],
+      "quantile_method": "numpy.linear",
+      "settings": {
+        "repository": "Salesforce/moirai-1.1-R-small",
+        "patch_size": 32,
+        "samples": 4096,
+        "batch_size": 1,
+        "target_dim": 1,
+        "covariates": 0
+      },
+      "implementation_sha256": "7b3fece73a07fefe361b378502b9448d1bd146469432b9c9f3ec04518af48c80",
+      "environment_sha256": "59df4833a119e7f165e23c97965925bbc22872aa83e1bcf1ce9a98011ffa4da7",
+      "job_id": "50b3a478cbebb6d9f1019637a71122603a3026e9a1c7f4cc4a1384bf50024e03"
+    },
+    {
+      "schema_version": 1,
+      "dataset": "Salesforce/GiftEval",
+      "config": "ett1/H",
+      "source_revision": "30841734ac5cfddbd0c3bad6d09d2b6b32becbb0",
+      "source_sha256": "e4f9484726edb0c28581df4d03b255239bab9b2c0ea14acfdb1fea69d79dd325",
+      "item_id": "item_0",
+      "channel": 0,
+      "series_id": "item_0_dim0",
+      "frequency": "H",
+      "origin": 16436,
+      "origin_timestamp": "2018-05-16T20:00:00",
+      "context_start": 14388,
+      "context_length": 2048,
+      "training_end": 16412,
+      "validation_end": 16460,
+      "horizon": 24,
+      "seed": 43,
+      "model": "moirai_1.1_R_small",
+      "family": "tsfm",
+      "compute_backend": "cuda",
+      "checkpoint": "0c24ab99db2c1a70ea2a0fc03bf113329772ac64",
+      "quantiles": [
+        0.01,
+        0.05,
+        0.09,
+        0.25,
+        0.4,
+        0.5,
+        0.6,
+        0.75,
+        0.91,
+        0.95,
+        0.99
+      ],
+      "quantile_method": "numpy.linear",
+      "settings": {
+        "repository": "Salesforce/moirai-1.1-R-small",
+        "patch_size": 32,
+        "samples": 4096,
+        "batch_size": 1,
+        "target_dim": 1,
+        "covariates": 0
+      },
+      "implementation_sha256": "7b3fece73a07fefe361b378502b9448d1bd146469432b9c9f3ec04518af48c80",
+      "environment_sha256": "59df4833a119e7f165e23c97965925bbc22872aa83e1bcf1ce9a98011ffa4da7",
+      "job_id": "150dcb4ad1b76a05dedfea72bf1015344a0315825412ec16afa67321e1421581"
+    }
+  ],
+  "resume_comparison": {
+    "all_four_jobs_exact": true,
+    "maximum_absolute_difference": 0.0
+  },
+  "uninterrupted_run": {
+    "data_load_seconds": 0.17598184799862793,
+    "jobs": [
+      {
+        "cache_write_seconds": 0.16618746899621328,
+        "device": "cpu",
+        "inference_sampling_seconds": 0.0004095410040463321,
+        "job_id": "bba8f4682879522ed3d7644bfd466151303ada9166ab730d61b2ab412fed0d2f",
+        "peak_gpu_memory_bytes": 0,
+        "rows": 24,
+        "status": "generated"
+      },
+      {
+        "cache_write_seconds": 0.0059647899979609065,
+        "device": "cpu",
+        "inference_sampling_seconds": 0.0002389799992670305,
+        "job_id": "e71f11fda091adef52bdea80023459005fbfbe9e14ebebd5b142b195bad238d4",
+        "peak_gpu_memory_bytes": 0,
+        "rows": 24,
+        "status": "generated"
+      },
+      {
+        "cache_write_seconds": 0.005923341996094678,
+        "device": "NVIDIA GeForce RTX 4050 Laptop GPU",
+        "inference_sampling_seconds": 0.38674231299955864,
+        "job_id": "50b3a478cbebb6d9f1019637a71122603a3026e9a1c7f4cc4a1384bf50024e03",
+        "peak_gpu_memory_bytes": 1180523520,
+        "rows": 24,
+        "status": "generated",
+        "warnings": [
+          "cumsum_cuda_kernel does not have a deterministic implementation, but you set 'torch.use_deterministic_algorithms(True, warn_only=True)'. You can file an issue at https://github.com/pytorch/pytorch/issues to help us prioritize adding deterministic support for this operation. (Triggered internally at ../aten/src/ATen/Context.cpp:83.)"
+        ]
+      },
+      {
+        "cache_write_seconds": 0.014678023995656986,
+        "device": "NVIDIA GeForce RTX 4050 Laptop GPU",
+        "inference_sampling_seconds": 0.1064078920026077,
+        "job_id": "150dcb4ad1b76a05dedfea72bf1015344a0315825412ec16afa67321e1421581",
+        "peak_gpu_memory_bytes": 1180523520,
+        "rows": 24,
+        "status": "generated",
+        "warnings": [
+          "cumsum_cuda_kernel does not have a deterministic implementation, but you set 'torch.use_deterministic_algorithms(True, warn_only=True)'. You can file an issue at https://github.com/pytorch/pytorch/issues to help us prioritize adding deterministic support for this operation. (Triggered internally at ../aten/src/ATen/Context.cpp:83.)"
+        ]
+      }
+    ],
+    "model_load_seconds": 2.7136779749998823,
+    "packages": {
+      "Jinja2": "3.1.6",
+      "Markdown": "3.10.3",
+      "MarkupSafe": "3.0.3",
+      "PyYAML": "6.0.3",
+      "Werkzeug": "3.1.8",
+      "absl-py": "2.5.0",
+      "aiohappyeyeballs": "2.7.1",
+      "aiohttp": "3.14.3",
+      "aiosignal": "1.4.0",
+      "annotated-types": "0.8.0",
+      "antlr4-python3-runtime": "4.9.3",
+      "attrs": "26.1.0",
+      "certifi": "2026.7.22",
+      "charset-normalizer": "3.5.1",
+      "datasets": "2.17.1",
+      "dill": "0.3.8",
+      "einops": "0.7.0",
+      "filelock": "3.32.5",
+      "frozenlist": "1.8.0",
+      "fsspec": "2023.10.0",
+      "gluonts": "0.14.3",
+      "grpcio": "1.83.1",
+      "huggingface-hub": "0.23.5",
+      "hydra-core": "1.3.0",
+      "idna": "3.19",
+      "jax": "0.6.1",
+      "jaxlib": "0.6.1",
+      "jaxtyping": "0.2.38",
+      "lightning": "2.4.0",
+      "lightning-utilities": "0.15.3",
+      "ml_dtypes": "0.5.4",
+      "mpmath": "1.3.0",
+      "multidict": "6.7.1",
+      "multiprocess": "0.70.16",
+      "networkx": "3.6.1",
+      "numpy": "1.26.4",
+      "nvidia-cublas-cu12": "12.1.3.1",
+      "nvidia-cuda-cupti-cu12": "12.1.105",
+      "nvidia-cuda-nvrtc-cu12": "12.1.105",
+      "nvidia-cuda-runtime-cu12": "12.1.105",
+      "nvidia-cudnn-cu12": "9.1.0.70",
+      "nvidia-cufft-cu12": "11.0.2.54",
+      "nvidia-curand-cu12": "10.3.2.106",
+      "nvidia-cusolver-cu12": "11.4.5.107",
+      "nvidia-cusparse-cu12": "12.1.0.106",
+      "nvidia-nccl-cu12": "2.20.5",
+      "nvidia-nvjitlink-cu12": "12.9.86",
+      "nvidia-nvtx-cu12": "12.1.105",
+      "omegaconf": "2.3.1",
+      "opt_einsum": "3.4.0",
+      "orjson": "3.12.0",
+      "packaging": "24.2",
+      "pandas": "2.2.3",
+      "pillow": "12.3.0",
+      "propcache": "0.5.2",
+      "protobuf": "7.36.1",
+      "pyarrow": "16.1.0",
+      "pyarrow-hotfix": "0.7",
+      "pydantic": "2.13.5",
+      "pydantic_core": "2.46.5",
+      "python-dateutil": "2.9.0.post0",
+      "python-dotenv": "1.0.0",
+      "pytorch-lightning": "2.4.0",
+      "pytz": "2026.3.post1",
+      "requests": "2.34.2",
+      "safetensors": "0.8.0",
+      "scipy": "1.11.4",
+      "setuptools": "84.0.0",
+      "six": "1.17.0",
+      "sympy": "1.14.0",
+      "tensorboard": "2.21.0",
+      "tensorboard-data-server": "0.7.2",
+      "toolz": "0.12.1",
+      "torch": "2.4.1",
+      "torchmetrics": "1.4.2",
+      "tqdm": "4.70.0",
+      "triton": "3.0.0",
+      "typing-inspection": "0.4.4",
+      "typing_extensions": "4.16.0",
+      "tzdata": "2026.3",
+      "uni2ts": "2.0.0",
+      "urllib3": "2.7.0",
+      "wadler_lindig": "0.1.7",
+      "xxhash": "4.0.1",
+      "yarl": "1.24.5"
+    },
+    "platform": "Linux-7.1.9-arch1-2-x86_64-with-glibc2.44",
+    "python": "3.11.15",
+    "started_at": "2026-09-08T19:41:45.157841+00:00",
+    "wall_seconds": 3.6814956689995597
+  }
+}
