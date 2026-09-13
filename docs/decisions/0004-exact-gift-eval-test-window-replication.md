@@ -118,4 +118,19 @@ correspondingly more of the series than under the flat-168 trim.
 - `K1_Omega_Validation_1.pdf`'s manifest-ingestion numbers still reflect
   the original pre-fix manifest (9,055 active, mean Omega_levels 0.5871)
   and need regenerating against this manifest before further citation.
+  **Second correction found during verification:** `min_length` was initially
+computed from NaN-stripped series lengths, matching GIFT-Eval's own
+convention of NaN-stripping before analysis elsewhere in this pipeline.
+This diverges from GIFT-Eval's actual `data.py`, which computes
+`_min_series_length` from raw pyarrow list lengths with no NaN-filtering.
+For `electricity_15T`, one client series has substantial internal missing
+data (raw length 140,256, NaN-stripped length ~16,032), causing a wildly
+undersized `min_length` and a badly undertrimmed test window for the whole
+subset (test_trim 2,160 instead of the correct 14,400). Fixed by computing
+`min_length` from raw series length and trimming the raw array before
+NaN-stripping (matching GIFT-Eval's position-based gluonts split), rather
+than NaN-stripping first. A duplicate, incorrect verification line in
+`check_testwindow_trim.py` initially masked whether this fix had actually
+been applied -- re-verified after removing it. `electricity_15T`: 370/370
+series, exact match.
 
