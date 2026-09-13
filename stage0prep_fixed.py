@@ -1,6 +1,8 @@
 import glob
 import json
+import math
 import os
+import re
 import numpy as np
 import pyarrow.feather as feather
 import pyarrow.ipc as ipc
@@ -12,9 +14,155 @@ DATA_DIR = "./gift_eval_data"
 
 STRICT_HELD_OUT = ["m5", "pjm"]
 
-# Pre-registered horizons from Stage 0, used as a conservative floor for
-# trimming the test window before Omega is computed (see note).
+# Pre-registered horizons from Stage 0. No longer used to size the
+# test-window trim -- kept for the manifest's "horizons" field, which
+# downstream analysis still reads.
 HORIZONS = [1, 24, 168]
+
+# --- Exact GIFT-Eval test-window replication -------------------------------
+# Copied from GIFT-Eval's own src/gift_eval/data.py (Aksu et al.). The real
+# test region for a (dataset, frequency, term) config is
+# prediction_length * windows, NOT a flat fraction of each series' own
+# length. windows is computed once per dataset config from the MINIMUM
+# series length in that config, rounded up to a whole number of
+# prediction-length blocks, capped at MAX_WINDOW. M4 datasets always use
+# exactly 1 window regardless of this formula.
+
+TEST_SPLIT = 0.1
+MAX_WINDOW = 20
+
+M4_PRED_LENGTH_MAP = {
+    "A": 6,
+    "Q": 8,
+    "M": 18,
+    "W": 13,
+    "D": 14,
+    "H": 48,
+}
+
+PRED_LENGTH_MAP = {
+    "M": 12,
+    "W": 8,
+    "D": 30,
+    "H": 48,
+    "T": 48,
+    "S": 60,
+}
+
+# short/medium/long multipliers from GIFT-Eval's Term enum. Our pipeline
+# doesn't track "term" per subset the way GIFT-Eval's Dataset class does --
+# a single raw directory here (e.g. ett1/H) backs all three term configs
+# in the real benchmark. For non-M4 datasets we compute the test region
+# under all three terms and trim by the LARGEST, guaranteeing Omega never
+# overlaps the true test window under any term the published K2a results
+# might use. This can overtrim subsets that only ever have a short-term
+# entry in GIFT-Eval's own results table, but never undertrims (no
+# leakage), and avoids hand-transcribing which terms exist per subset.
+TERM_MULTIPLIERS = {"short": 1, "medium": 10, "long": 15}
+
+
+def maybe_reconvert_freq(freq: str) -> str:
+    """Map newer pandas frequency aliases back to the older ones GIFT-Eval's
+    maps use, e.g. 'h' -> 'H', 'min' -> 'T'. Copied from data.py.
+    """
+    deprecated_map = {
+        "Y": "A",
+        "YE": "A",
+        "QE": "Q",
+        "ME": "M",
+        "h": "H",
+        "min": "T",
+        "s": "S",
+        "us": "U",
+    }
+    return deprecated_map.get(freq, freq)
+
+
+def base_freq_code(freq: str) -> str:
+    """Reduce a raw frequency string to the base code PRED_LENGTH_MAP /
+    M4_PRED_LENGTH_MAP key on. Strips a leading numeric multiplier
+    ('15T' -> 'T', '10S' -> 'S') and any anchor suffix
+    ('A-DEC' -> 'A', 'W-THU' -> 'W'), then normalizes deprecated aliases.
+    """
+    freq = freq.strip()
+    freq = re.sub(r"^\d+", "", freq)
+    freq = freq.split("-")[0]
+    return maybe_reconvert_freq(freq)
+
+
+def detect_subset_freq(dir_path: str, ds) -> str | None:
+    """Read the per-series 'freq' field GIFT-Eval's HF datasets store.
+    Tries the primary Dataset object first, then falls back to reading it
+    directly from an arrow file if the primary load failed. Returns None
+    if it can't be determined, in which case the caller falls back to a
+    flat 10%-of-min-length approximation for that subset only.
+    """
+    try:
+        if ds is not None and "freq" in ds.column_names:
+            val = ds["freq"][0]
+            if val:
+                return str(val)
+    except Exception:
+        pass
+
+    try:
+        arrow_files = glob.glob(os.path.join(dir_path, "*.arrow"))
+        for af in arrow_files:
+            if "cache" in af:
+                continue
+            table = feather.read_table(af)
+            if "freq" in table.column_names:
+                val = table.column("freq")[0].as_py()
+                if val:
+                    return str(val)
+    except Exception:
+        pass
+
+    return None
+
+
+def compute_windows(min_length: int, prediction_length: int) -> int:
+    if prediction_length <= 0:
+        return 1
+    w = math.ceil(TEST_SPLIT * min_length / prediction_length)
+    return min(max(1, w), MAX_WINDOW)
+
+
+def compute_test_trim(subset_name: str, freq_code: str | None, min_length: int) -> int:
+    """Returns the number of trailing timesteps to trim from every series in
+    this subset, matching (or conservatively exceeding) GIFT-Eval's actual
+    test-window size. See module docstring above for the M4 special case
+    and the max-over-terms approximation for everything else.
+    """
+    is_m4 = "m4" in subset_name
+    pred_map = M4_PRED_LENGTH_MAP if is_m4 else PRED_LENGTH_MAP
+
+    if freq_code is None or freq_code not in pred_map:
+        print(
+            f"  [WARN] {subset_name}: could not resolve frequency "
+            f"({freq_code!r}) to a known prediction-length code; "
+            f"falling back to a flat 10% trim for this subset."
+        )
+        return int(min_length * TEST_SPLIT)
+
+    base_pred_len = pred_map[freq_code]
+
+    if is_m4:
+        # M4 is only ever published at its native (short-term) horizon --
+        # GIFT-Eval's results table has no medium/long columns for any M4
+        # subset. windows is forced to 1 regardless of term.
+        prediction_length = base_pred_len * TERM_MULTIPLIERS["short"]
+        return prediction_length * 1
+
+    trims = []
+    for multiplier in TERM_MULTIPLIERS.values():
+        prediction_length = base_pred_len * multiplier
+        windows = compute_windows(min_length, prediction_length)
+        trims.append(prediction_length * windows)
+    return max(trims)
+
+
+# --- End exact GIFT-Eval test-window replication ----------------------------
 
 
 def split_channels(raw: np.ndarray) -> list[tuple[int | None, np.ndarray]]:
@@ -34,9 +182,8 @@ def split_channels(raw: np.ndarray) -> list[tuple[int | None, np.ndarray]]:
     if raw.ndim == 1:
         return [(None, raw)]
     elif raw.ndim == 2:
-        # Confirmed convention for gift-eval multivariate targets,rows are
-        # channels, columns are timesteps.
-        # If a dataset ever violates this,
+        # Confirmed convention for gift-eval multivariate targets: rows are
+        # channels, columns are timesteps. If a dataset ever violates this,
         # the exact-division check upstream (channel count divides length)
         # is how it would be caught.
         return [(ch, raw[ch]) for ch in range(raw.shape[0])]
@@ -105,14 +252,10 @@ def load_train_only(dir_path: str):
     """Prefer an explicit train split if the dataset exposes one.
 
     NOTE: if `load_from_disk` already returns only a train-portion Dataset
-    (no explicit split dict), this can't detect that from here, so it also
-    can't fully rule out leakage on its own. The trim in process_all_gift_eval
-    (last max(HORIZONS) timesteps dropped) is a conservative backstop for
-    that case. Confirm the true GIFT-Eval test-window convention (it may be
-    multiple rolling windows, not one horizon-length chunk) before reporting
-    final K2a numbers -- Veer already measured the current leakage effect at
-    <0.04, so this is about correctness of the replication claim, not about
-    changing the conclusion.
+    (no explicit split dict), this can't detect that from here. The trim in
+    process_all_gift_eval is now the exact GIFT-Eval windows-based test
+    region (see compute_test_trim above), confirmed against GIFT-Eval's
+    own src/gift_eval/data.py rather than the paper's prose summary.
     """
     ds = load_from_disk(dir_path)
     if hasattr(ds, "keys") and "train" in ds.keys():
@@ -134,7 +277,6 @@ def process_all_gift_eval():
     print(f"Found {len(dataset_dirs)} dataset partitions. Processing...")
 
     series_counter = 0
-    test_trim = max(HORIZONS)
 
     for info_file in dataset_dirs:
         dir_path = os.path.dirname(info_file)
@@ -146,13 +288,14 @@ def process_all_gift_eval():
         subset_name = rel_path.replace("\\", "_").replace("/", "_")
 
         extracted_series = []
+        ds = None
 
         # Attempt primary HF load_from_disk
         try:
             ds = load_train_only(dir_path)
             extracted_series = extract_targets_from_dataset(ds)
         except Exception:
-
+            ds = None
             arrow_files = glob.glob(
                 os.path.join(dir_path, "*.arrow"), recursive=True
             )
@@ -161,12 +304,34 @@ def process_all_gift_eval():
                     continue
                 extracted_series.extend(extract_targets_from_arrow_file(af))
 
-        for channel_idx, ts in extracted_series:
-            ts = ts[np.isfinite(ts)]
+        # min_length uses RAW series length (before NaN-stripping), matching
+        # GIFT-Eval's own data.py: _min_series_length reads pyarrow list
+        # lengths directly, with no NaN-filtering. Some datasets (e.g.
+        # electricity_15T) store every series at the same nominal array
+        # length but pad missing history with NaN -- NaN-stripping before
+        # computing min_length would badly undercount for those series and
+        # undertrim the whole subset. Filter out only genuinely empty
+        # (zero-length) raw series here.
+        raw_series = [(ch, ts) for ch, ts in extracted_series if len(ts) > 0]
 
-            # Conservative test-window trim -- see load_train_only() note.
-            if test_trim > 0 and len(ts) > test_trim:
-                ts = ts[:-test_trim]
+        if not raw_series:
+            continue
+
+        min_length = min(len(ts) for _, ts in raw_series)
+        raw_freq = detect_subset_freq(dir_path, ds)
+        freq_code = base_freq_code(raw_freq) if raw_freq else None
+        test_trim = compute_test_trim(subset_name, freq_code, min_length)
+
+        for channel_idx, raw_ts in raw_series:
+            # Trim off the RAW array's tail first, matching GIFT-Eval's
+            # position-based split (gluonts trims by raw timestep offset,
+            # not by count of non-missing values). NaN-strip afterward,
+            # for the floor check and for compute_omega.
+            if test_trim > 0:
+                trimmed = raw_ts[:-test_trim] if len(raw_ts) > test_trim else raw_ts[:0]
+            else:
+                trimmed = raw_ts
+            ts = trimmed[np.isfinite(trimmed)]
 
             length = len(ts)
             series_counter += 1
