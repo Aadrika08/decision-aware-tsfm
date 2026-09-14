@@ -150,7 +150,5 @@ Both points should be settled before the roster is frozen.
 | `deliverable_1_joined_table.csv` | Dataset, Omega on levels and differences, within-dataset spread, series count, median length, model family, sMAPE, MSE, MAE, pinball at tau=0.5, CRPS |
 | `deliverable_2_replication_figure.png` | Omega against Delta for both comparisons on both metrics, with published thresholds at 0.4 and 0.5 marked |
 | `deliverable_4_summary_stats.csv` | All twelve correlations with sample sizes and p-values |
-| `rerun.py` | Full analysis, reproduces every number above |
-| `k2b_and_robustness.py` | Robustness sweep across aggregation choices |
-| `make_deliverables.py` | Generates the table and figure |
+| `run_k2.py` | Full analysis, self-contained. `--fetch-results` downloads the published results; `--manifest` points at the Omega manifest; `--figure` writes the plot. Reproduces every number above. |
 | `gift_results.csv` | Concatenated published results, 129 models, 97 configurations |
