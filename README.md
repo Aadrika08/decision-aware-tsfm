@@ -47,6 +47,28 @@ A failed gate is a valid result. Do not change an experiment to force a positive
 - [`docs/proposal.pdf`](docs/proposal.pdf) — full research proposal
 - [`docs/decisions/`](docs/decisions/) — decision log for anything that changes the experiment
 
+## Repository layout
+
+Reusable research logic is under [`src/decision_aware_tsfm/`](src/decision_aware_tsfm/),
+grouped by ownership: `omega/` and `data/`, `cache/`, `analysis/k2/`, and
+`analysis/k3/`. Runnable commands live in [`scripts/`](scripts/), tests in
+[`tests/`](tests/), and small result records in [`docs/results/`](docs/results/).
+
+The frozen manifest and published K2 inputs are in
+[`artifacts/reference/`](artifacts/reference/). New manifests, raw tables, and
+forecast caches belong in ignored `artifacts/runs/`; pair every run with a small
+result record stating its command, input hash, commit, seed, and conclusion.
+
+For the pinned smoke environment:
+
+```bash
+uv venv --python 3.11 .venv
+uv pip sync --python .venv/bin/python requirements/smoke.txt
+uv pip install --python .venv/bin/python -e .
+```
+
+See the [forecast/cache runbook](docs/runbooks/forecast-smoke.md) for commands.
+
 ## Contributing
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md).

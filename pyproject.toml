@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "decision-aware-tsfm"
+version = "0.1.0"
+description = "Decision-aware model-family selection research workflows"
+readme = "README.md"
+requires-python = ">=3.10"
+
+[project.scripts]
+decision-aware-prepare-manifest = "decision_aware_tsfm.data.gift_eval_manifest:main"
+decision-aware-forecast-smoke = "decision_aware_tsfm.cache.forecast_smoke:main"
+decision-aware-verify-smoke-release = "decision_aware_tsfm.cache.release_verification:main"
+decision-aware-run-k2 = "decision_aware_tsfm.analysis.k2.replication:main"
+decision-aware-matched-omega = "decision_aware_tsfm.analysis.k3.matched_omega_pair:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

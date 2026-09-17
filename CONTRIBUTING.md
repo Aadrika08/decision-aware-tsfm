@@ -240,3 +240,26 @@ If you cannot point at the decision record, the change did not happen.
 - M5 and PJM are held out. No fitting, tuning, or debugging against them.
 - Save every result, configuration, seed, runtime, and dataset split.
 - A failed gate is a valid result. Do not change the experiment to force a positive outcome.
+
+---
+
+## 7. Repository ownership and merge safety
+
+Keep implementation work inside one owned area wherever possible:
+
+| Area | Owner | Purpose |
+|---|---|---|
+| `src/decision_aware_tsfm/omega/`, `data/` | Dayson | Omega and GIFT-Eval preparation |
+| `src/decision_aware_tsfm/cache/` | Aadrika | Forecast/cache workflow and release checks |
+| `src/decision_aware_tsfm/analysis/k2/` | Veer | K2 replication |
+| `src/decision_aware_tsfm/analysis/k3/` | Abdullah | Matched-Omega and K3 work |
+| `src/decision_aware_tsfm/contracts/`, `configs/`, dependency files, `docs/decisions/` | shared | Explicit coordination required |
+
+- One PR should normally change one owned area plus its matching tests and result
+  record. Do not use the repository root for new experiment code.
+- Put raw generated data in `artifacts/runs/`, which Git ignores. Keep only small
+  human-readable findings under `docs/results/<area>/`, using a new file per run.
+- Do not edit another contributor's result record. Add a new dated record and
+  link to the earlier result when comparing or superseding it.
+- Changes to shared contracts, frozen configurations, dependency pins, or research
+  decisions must have a dedicated issue and the relevant owner review.
