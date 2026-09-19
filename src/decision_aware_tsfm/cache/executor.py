@@ -135,10 +135,13 @@ def generation_lock(cache):
     cache.mkdir(parents=True, exist_ok=True)
     stream = (cache / ".writer.lock").open("a+b")
     try:
-        stream.seek(0)
-        if stream.read(1) == b"":
-            stream.write(b"0")
-            stream.flush()
+        # Windows byte-range locks also forbid reading the locked byte.
+        try:
+            if os.fstat(stream.fileno()).st_size == 0:
+                stream.write(b"0")
+                stream.flush()
+        except PermissionError as error:
+            raise BlockingIOError("Another cache generator holds the coordinator lock") from error
         stream.seek(0)
         if os.name == "nt":
             import msvcrt
@@ -303,10 +306,16 @@ def _validate_table(table, job):
     return table
 
 
+def _read_parquet(path):
+    # Close even when ParquetFile construction fails and its traceback survives.
+    with Path(path).open("rb") as stream:
+        return pq.ParquetFile(stream).read()
+
+
 def read_job(cache, job):
     """Read and fully validate one cache partition without source or model access."""
     _validate_job_id(job)
-    table = pq.ParquetFile(job_path(cache, job)).read()
+    table = _read_parquet(job_path(cache, job))
     return _validate_table(table, job)
 
 
@@ -532,7 +541,7 @@ def audit(plan, cache):
         if "quarantine" in path.relative_to(root).parts:
             continue
         try:
-            table = pq.ParquetFile(path).read()
+            table = _read_parquet(path)
             metadata = table.schema.metadata or {}
             job = by_metadata.get(metadata.get(b"job"))
             if job is None:

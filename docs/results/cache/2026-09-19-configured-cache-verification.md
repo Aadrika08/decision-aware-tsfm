@@ -62,6 +62,15 @@ Linux and Windows fixture/release checks are configured in the PR workflow; the
 local results above do not establish Windows execution. See the PR's CI results
 for the remote platform checks.
 
+The first Windows CI run exposed two platform-specific failures in the existing
+contention and corruption/repair tests: Windows forbids reading a locked byte,
+and a failed Parquet constructor retained an open file through its traceback.
+The follow-up fix checks lock-file size without reading the locked region and
+closes the underlying file explicitly on every Parquet read path. The full local
+suite then passed all 60 tests again in 13.518 seconds. The recorded fixture run
+above remains tied to its original implementation commit; the latest PR checks
+cover the follow-up fix.
+
 The source staging interface currently accepts a single real numeric NPY series
 with preserved chronology and explicit source identity. Model batching above one
 remains unqualified. CPU jobs use bounded processes; GPU jobs run serially. The
