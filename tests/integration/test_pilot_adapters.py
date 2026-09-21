@@ -53,6 +53,14 @@ class _ETS(_Native):
         return np.repeat(np.arange(n_paths, dtype=float)[:, None], h, axis=1)
 
 
+def fake_model_modules():
+    module = types.ModuleType("statsforecast.models")
+    module.AutoARIMA, module.AutoETS, module.SeasonalNaive = _Native, _ETS, _Native
+    package = types.ModuleType("statsforecast")
+    package.models = module
+    return {"statsforecast": package, "statsforecast.models": module}
+
+
 class PilotAdapterTest(unittest.TestCase):
     def test_canonical_configs_are_fresh_and_device_is_moirai_only(self):
         first = pilot_models()
@@ -65,14 +73,8 @@ class PilotAdapterTest(unittest.TestCase):
 
     @patch("importlib.metadata.version", return_value="2.1.1")
     def test_native_and_simulated_predictions_are_real_ordered_quantiles(self, _version):
-        module = types.ModuleType("statsforecast.models")
-        module.AutoARIMA = _Native
-        module.AutoETS = _ETS
-        module.SeasonalNaive = _Native
-        package = types.ModuleType("statsforecast")
-        package.models = module
         context = np.arange(2048.0)
-        with patch.dict(sys.modules, {"statsforecast": package, "statsforecast.models": module}):
+        with patch.dict(sys.modules, fake_model_modules()):
             native, native_measurement = load_adapter(pilot_job()).predict(context, pilot_job())
             simulated, simulated_measurement = load_adapter(pilot_job("autoets_simulated")).predict(
                 context, pilot_job("autoets_simulated"))
@@ -108,7 +110,8 @@ class PilotAdapterTest(unittest.TestCase):
     def test_loading_rejects_version_and_validation_rejects_drift(self, _version):
         with self.assertRaisesRegex(RuntimeError, "2.1.1"):
             load_adapter(pilot_job())
-        with patch("importlib.metadata.version", return_value="2.1.1"):
+        with patch("importlib.metadata.version", return_value="2.1.1"), \
+                patch.dict(sys.modules, fake_model_modules()):
             for job, message in ((pilot_job(horizon=2), "horizon"),
                                  (pilot_job(seed=1), "seed"),
                                  (pilot_job(settings={}), "configuration")):
