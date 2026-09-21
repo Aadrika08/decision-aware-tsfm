@@ -1,0 +1,161 @@
+{
+  "schema_version": 1,
+  "status": "existing smoke payload; production coordination pending",
+  "row_key": [
+    "job_id",
+    "step"
+  ],
+  "taus": [
+    0.01,
+    0.05,
+    0.09,
+    0.25,
+    0.4,
+    0.5,
+    0.6,
+    0.75,
+    0.91,
+    0.95,
+    0.99
+  ],
+  "columns": [
+    {
+      "name": "job_id",
+      "arrow_type": "string",
+      "physical_nullable": true,
+      "null_values_allowed": false
+    },
+    {
+      "name": "dataset",
+      "arrow_type": "string",
+      "physical_nullable": true,
+      "null_values_allowed": false
+    },
+    {
+      "name": "config",
+      "arrow_type": "string",
+      "physical_nullable": true,
+      "null_values_allowed": false
+    },
+    {
+      "name": "series_id",
+      "arrow_type": "string",
+      "physical_nullable": true,
+      "null_values_allowed": false
+    },
+    {
+      "name": "model",
+      "arrow_type": "string",
+      "physical_nullable": true,
+      "null_values_allowed": false
+    },
+    {
+      "name": "family",
+      "arrow_type": "string",
+      "physical_nullable": true,
+      "null_values_allowed": false
+    },
+    {
+      "name": "origin",
+      "arrow_type": "int64",
+      "physical_nullable": true,
+      "null_values_allowed": false
+    },
+    {
+      "name": "horizon",
+      "arrow_type": "int64",
+      "physical_nullable": true,
+      "null_values_allowed": false
+    },
+    {
+      "name": "seed",
+      "arrow_type": "int64",
+      "physical_nullable": true,
+      "null_values_allowed": false
+    },
+    {
+      "name": "step",
+      "arrow_type": "int64",
+      "physical_nullable": true,
+      "null_values_allowed": false
+    },
+    {
+      "name": "y_true",
+      "arrow_type": "double",
+      "physical_nullable": true,
+      "null_values_allowed": false
+    },
+    {
+      "name": "timestamp",
+      "arrow_type": "string",
+      "physical_nullable": true,
+      "null_values_allowed": false
+    },
+    {
+      "name": "q_0.01",
+      "arrow_type": "double",
+      "physical_nullable": true,
+      "null_values_allowed": false
+    },
+    {
+      "name": "q_0.05",
+      "arrow_type": "double",
+      "physical_nullable": true,
+      "null_values_allowed": false
+    },
+    {
+      "name": "q_0.09",
+      "arrow_type": "double",
+      "physical_nullable": true,
+      "null_values_allowed": false
+    },
+    {
+      "name": "q_0.25",
+      "arrow_type": "double",
+      "physical_nullable": true,
+      "null_values_allowed": false
+    },
+    {
+      "name": "q_0.40",
+      "arrow_type": "double",
+      "physical_nullable": true,
+      "null_values_allowed": false
+    },
+    {
+      "name": "q_0.50",
+      "arrow_type": "double",
+      "physical_nullable": true,
+      "null_values_allowed": false
+    },
+    {
+      "name": "q_0.60",
+      "arrow_type": "double",
+      "physical_nullable": true,
+      "null_values_allowed": false
+    },
+    {
+      "name": "q_0.75",
+      "arrow_type": "double",
+      "physical_nullable": true,
+      "null_values_allowed": false
+    },
+    {
+      "name": "q_0.91",
+      "arrow_type": "double",
+      "physical_nullable": true,
+      "null_values_allowed": false
+    },
+    {
+      "name": "q_0.95",
+      "arrow_type": "double",
+      "physical_nullable": true,
+      "null_values_allowed": false
+    },
+    {
+      "name": "q_0.99",
+      "arrow_type": "double",
+      "physical_nullable": true,
+      "null_values_allowed": false
+    }
+  ]
+}
