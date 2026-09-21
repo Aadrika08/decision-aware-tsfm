@@ -138,7 +138,7 @@ def _validate_row(row, fixture, base_dir):
 def _implementation():
     directory = Path(__file__).resolve().parent
     content = bytearray()
-    for name in ("planner.py", "executor.py", "adapters.py", "schema.py"):
+    for name in ("planner.py", "executor.py", "adapters.py", "pilot.py", "schema.py"):
         path = directory / name
         if path.exists():
             normalized = path.read_bytes().replace(b"\r\n", b"\n").replace(b"\r", b"\n")
@@ -148,7 +148,9 @@ def _implementation():
 
 def _environment():
     versions = {"python": sys.version.split()[0]}
-    for package in ("numpy", "scipy", "pandas", "pyarrow", "torch", "uni2ts"):
+    for package in ("numpy", "scipy", "pandas", "pyarrow", "torch", "uni2ts",
+                    "statsforecast", "statsmodels", "coreforecast", "utilsforecast",
+                    "threadpoolctl"):
         try:
             versions[package] = importlib.metadata.version(package)
         except importlib.metadata.PackageNotFoundError:

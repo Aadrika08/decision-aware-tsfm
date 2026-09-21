@@ -7,8 +7,10 @@ The production sprint supplied on 2026-09-19 has SHA-256
 
 The agreed first real pilot is Moirai-small, SeasonalNaive, AutoETS and AutoARIMA,
 with the local RTX 4050 and CPU as the timing hosts. Comparative within-TSFM
-selection waits for expansion. These choices do not supply the missing approved
-workload or classical distribution methods. No real pilot or full grid is claimed here.
+selection waits for expansion. The methods are now accepted in
+[ADR 0005](../decisions/0005-pilot-adapter-qualification.md), with a
+[completed synthetic qualification](../results/cache/2026-09-21-pilot-adapter-qualification.md).
+The approved real workload is still missing. No real pilot or full grid is claimed here.
 
 ## Run the complete fixture flow
 
@@ -68,8 +70,9 @@ this version requires timezone-naive input. Horizons count observations, not hou
 The model JSON uses `schema_version: 1` and a `models` list. Each entry contains
 `model`, `family`, `adapter`, `adapter_version`, `checkpoint`, `device`, `batch_size`,
 `quantile_method`, and `settings`. Examples come from the fixture command. See
-[adapter qualifications](classical-adapter-qualification.md) for the exact historical
-Moirai and SeasonalNaive configurations and the unqualified AutoETS/AutoARIMA status.
+[historical adapter qualifications](classical-adapter-qualification.md) for the
+original smoke methods and the [pilot qualification runbook](pilot-adapter-qualification.md)
+for the accepted four-model configurations and synthetic results.
 
 Planning never loads source arrays or model weights. It rejects duplicate logical
 windows, invalid bounds, unsupported adapter configurations and held-out identities.
@@ -153,8 +156,6 @@ Resource coverage alone is not approval to run the full grid.
   usable-series counts, all split/window bounds, and separately versioned Omega
   variants with their history cutoffs. Hospital currently has no usable series;
   Aadrika does not silently replace it or impose a high-frequency-only selection.
-- Veer/project lead: recorded predictive-distribution choices and qualified model
-  configurations. The historical h=24 smoke is not qualification for h=1 or h=168.
 - Veer and Abdullah: acceptance of the common fixture, then actual pilot partitions.
 - Aadrika: run the approved pilot on the local RTX 4050/CPU, measure all retained
   configurations, and obtain the full-workload schedule and accepted margins.
@@ -163,7 +164,7 @@ Real generation additionally requires `--real` and workload/model
 `approval_reference` fields pointing to genuine recorded decisions. These fields
 are provenance, not a substitute for review. Do not invent them to bypass a gate.
 M5/PJM and the full grid remain excluded. #3 stays open for its full-grid budget;
-#16 stays open for real qualification, pilot acceptance and the measured budget.
+#16 stays open for the real workload, pilot acceptance and the measured budget.
 
 ## Verification
 
