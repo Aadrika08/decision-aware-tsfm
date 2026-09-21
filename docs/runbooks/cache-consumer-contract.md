@@ -40,6 +40,11 @@ existing release verifier for real v1 provenance and identity verification.
 
 ## Model evidence as of 2026-09-19
 
+This table describes the historical handoff. The later
+[2026-09-21 synthetic qualification](../results/cache/2026-09-21-pilot-adapter-qualification.md)
+passed all four approved pilot adapters at horizons 1/24/168; use the
+[development pilot runbook](development-pilot.md) for the current integration steps.
+
 | Model | Evidence available | Limits / action needed |
 |---|---|---|
 | Moirai-1.1-R-small | Passed all eleven quantiles in the released test | One ETT channel, h=24, context=2048, 4096 distribution samples, NumPy linear quantiles. Tail calibration and other horizons are not established. |
