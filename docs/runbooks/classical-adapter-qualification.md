@@ -1,5 +1,11 @@
 # Classical adapter qualification boundary
 
+Update, 2026-09-20: the four-model synthetic qualification methods are now accepted
+in [ADR 0005](../decisions/0005-pilot-adapter-qualification.md) and implemented under
+separate adapter names in #20. Use the [qualification runbook](pilot-adapter-qualification.md)
+for those configurations. The historical interface and original proposal below
+explain the boundary preserved by #17; they are not the latest qualification status.
+
 Issue #17 provides the adapter fixture and preserves two historical smoke paths. It does
 not qualify the final four-model workload or produce new forecast evidence.
 
