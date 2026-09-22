@@ -9,12 +9,15 @@ joblib==1.6.0
 numpy==1.26.4
     # via
     #   -r requirements/analysis.in
+    #   pyarrow
     #   scikit-learn
     #   scipy
 packaging==26.3
     # via pytest
 pluggy==1.6.0
     # via pytest
+pyarrow==16.1.0
+    # via -r requirements/analysis.in
 pytest==8.3.4
     # via -r requirements/analysis.in
 scikit-learn==1.5.2
