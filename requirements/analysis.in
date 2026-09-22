@@ -1,0 +1,6 @@
+# Issue #22 only. K3 analysis (no model inference). Python 3.11; compile to requirements/analysis.txt with uv pip compile.
+# numpy and scipy match smoke.in so cache-derived numbers use identical numerics.
+numpy==1.26.4
+scipy==1.11.4
+scikit-learn==1.5.2
+pytest==8.3.4
