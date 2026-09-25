@@ -23,6 +23,12 @@ with Omega variation. The tool checks multiple series/configurations and complet
 comparison coverage; it cannot infer the approved dataset roster from folder names.
 Human review of the manifest against its decision remains necessary.
 
+Agree the [production naming and consumer contract](production-cache-handoff.md)
+before freeze. The top-level development label alone is not the selector's
+fitting/unseen-development split: Veer and Abdullah must define those roles,
+Dayson must encode the approved assignment, and the handoff must preserve it.
+Readiness validates the supplied forecast bounds; it does not choose those roles.
+
 Resolve Jena's duplicate source, Hospital's zero usable series and the US Births
 review/manifest discrepancy in Stage 0. Long-history M4 daily/weekly/monthly and
 Hierarchical Sales daily are not excluded by an invented frequency policy. Wider
@@ -40,14 +46,16 @@ this sidecar; they are never inserted into forecast payloads or forecast identit
 {
   "schema_version": 1,
   "fixture": false,
+  "naming_scheme": "dataset-config-v1",
+  "source_repository": "Salesforce/GiftEval",
   "variants": {
     "current": "Exact current method, levels/differences choice and implementation revision",
     "last_4096": "Same method/revision applied to at most the last 4096 observations"
   },
   "rows": [
     {
-      "dataset": "source repository",
-      "config": "approved configuration",
+      "dataset": "ett1",
+      "config": "H",
       "series_id": "upstream stable identity",
       "source_revision": "immutable source revision",
       "source_sha256": "64 hexadecimal characters",
@@ -62,7 +70,9 @@ this sidecar; they are never inserted into forecast payloads or forecast identit
 ```
 
 The example is illustrative and incomplete: supply one row per declared variant
-and source/origin. The corresponding `last_4096` row above starts at 904 and ends
+and source/origin. Workload and sidecar naming headers must match exactly; legacy
+workloads use sidecars with neither naming field. The corresponding `last_4096`
+row above starts at 904 and ends
 at 5000. History bounds are zero-based, end-exclusive and cannot extend past the
 forecast origin. Both roles use the same cutoff; capped history starts at
 `max(current.history_start, current.history_end - 4096)`. The checker reports actual

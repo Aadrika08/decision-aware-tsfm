@@ -10,7 +10,7 @@ from pathlib import Path
 from .cli import atomic_output, read_json
 from .executor import _guard_source, load_source
 from .pilot import pilot_models
-from .planner import MODEL_FIELDS, canonical, digest, plan
+from .planner import MODEL_FIELDS, NAMING_FIELDS, _naming, canonical, digest, plan
 
 
 SERIES = ("dataset", "config", "series_id", "source_revision", "source_sha256")
@@ -21,9 +21,11 @@ def _key(row):
     return tuple(row[field] for field in SERIES) + (row["origin"],)
 
 
-def _omega_check(omega, groups, fixture):
+def _omega_check(omega, groups, fixture, naming):
     if not isinstance(omega, dict) or omega.get("schema_version") != 1:
         raise ValueError("Omega handoff requires schema_version 1")
+    if _naming(omega) != naming:
+        raise ValueError("Omega and workload naming metadata must agree")
     if not isinstance(omega.get("fixture"), bool) or omega["fixture"] != fixture:
         raise ValueError("Omega and workload fixture labels must agree")
     variants = omega.get("variants")
@@ -37,6 +39,8 @@ def _omega_check(omega, groups, fixture):
     for row in omega["rows"]:
         if not isinstance(row, dict):
             raise ValueError("Omega row must be a mapping")
+        if set(NAMING_FIELDS) & row.keys():
+            raise ValueError("Omega naming metadata belongs in the sidecar header")
         key = _key(row)
         variant = row["variant"]
         if key not in groups or variant not in variants:
@@ -81,6 +85,8 @@ def inspect_pilot(workload, models, omega, *, base_dir):
               "source_windows_verified": 0}
     try:
         planned = plan(workload, models, base_dir=base_dir)
+        naming = {field: planned["jobs"][0][field] for field in NAMING_FIELDS
+                  if field in planned["jobs"][0]}
         report.update(fixture=planned["fixture"], workload_sha256=planned["workload_sha256"],
                       model_document_sha256=digest(canonical(models).encode()),
                       omega_document_sha256=digest(canonical(omega).encode()),
@@ -93,7 +99,8 @@ def inspect_pilot(workload, models, omega, *, base_dir):
             # Guard EVERY source, including resolved aliases, before opening any source.
             _guard_source(job)
             short = tuple(job[k] for k in SERIES[:3])
-            identity = tuple(job[k] for k in ("source_revision", "source_sha256", "item_id", "channel"))
+            identity = (job.get("source_repository"),) + tuple(
+                job[k] for k in ("source_revision", "source_sha256", "item_id", "channel"))
             if short in mappings and mappings[short] != identity:
                 raise ValueError("One stable series ID maps to inconsistent source identities")
             mappings[short] = identity
@@ -110,7 +117,7 @@ def inspect_pilot(workload, models, omega, *, base_dir):
                       "usable_start", "usable_end", "source_length", "start_timestamp", "frequency")
             if len({tuple(j[k] for k in fields) for j in jobs}) != 1:
                 raise ValueError("Comparison jobs disagree on context or split bounds")
-        report["omega"] = _omega_check(omega, groups, planned["fixture"])
+        report["omega"] = _omega_check(omega, groups, planned["fixture"], naming)
         verified = set()
         for job in planned["jobs"]:
             window = (job["source_path"], job["source_sha256"], job["source_length"],

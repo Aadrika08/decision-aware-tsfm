@@ -28,6 +28,8 @@ MODEL_FIELDS = (
 IDENTITY_FIELDS = ("schema_version", "fixture", "quantiles") + ROW_FIELDS + MODEL_FIELDS + (
     "implementation_sha256", "environment_sha256",
 )
+NAMING_SCHEME = "dataset-config-v1"
+NAMING_FIELDS = ("naming_scheme", "source_repository")
 REQUIRED_ROW_FIELDS = (set(ROW_FIELDS) - {"origin_timestamp", "context_start_timestamp"}) | {"source_path"}
 
 
@@ -46,7 +48,46 @@ def job_identity(job) -> dict:
     missing = [field for field in IDENTITY_FIELDS if field not in job]
     if missing:
         raise ValueError(f"Job identity is missing fields: {', '.join(missing)}")
-    return {field: job[field] for field in IDENTITY_FIELDS}
+    identity = {field: job[field] for field in IDENTITY_FIELDS}
+    naming = _naming(job)
+    _validate_names(job, naming)
+    identity.update(naming)
+    return identity
+
+
+def _naming(document):
+    present = set(NAMING_FIELDS) & document.keys()
+    if not present:
+        return {}
+    if present != set(NAMING_FIELDS) or document["naming_scheme"] != NAMING_SCHEME:
+        raise ValueError("Naming metadata requires dataset-config-v1 and source_repository")
+    repository = document["source_repository"]
+    if not isinstance(repository, str) or not repository or repository != repository.strip():
+        raise ValueError("source_repository must be a nonempty, trimmed string")
+    if _held_out(repository):
+        raise ValueError("M5 and PJM are held out")
+    return {field: document[field] for field in NAMING_FIELDS}
+
+
+def _validate_names(row, naming):
+    if not isinstance(row["dataset"], str) or not row["dataset"]:
+        raise ValueError("dataset must be a nonempty string")
+    if not isinstance(row["config"], str) or (not naming and not row["config"]):
+        raise ValueError("config must be a string, nonempty for legacy workloads")
+    if naming and any("/" in row[name] or row[name] != row[name].strip()
+                      for name in ("dataset", "config")):
+        raise ValueError("Production dataset and config must be separate literal components")
+
+
+def validate_series_mappings(rows):
+    mappings = {}
+    for row in rows:
+        short = tuple(row[field] for field in ("dataset", "config", "series_id"))
+        source = (row.get("source_repository"),) + tuple(
+            row[field] for field in ("source_revision", "source_sha256", "item_id", "channel"))
+        if short in mappings and mappings[short] != source:
+            raise ValueError("One stable series ID maps to inconsistent source identities")
+        mappings[short] = source
 
 
 def _timestamps(start, frequency, positions):
@@ -95,13 +136,16 @@ def _held_out(value):
     return bool({"m5", "pjm"} & set(re.split(r"[^a-z0-9]+", str(value).lower())))
 
 
-def _validate_row(row, fixture, base_dir):
+def _validate_row(row, fixture, base_dir, naming):
     if not isinstance(row, dict) or REQUIRED_ROW_FIELDS - row.keys():
         raise ValueError("Workload row is missing required fields")
-    for name in ("source_revision", "dataset", "config", "series_id", "item_id", "frequency",
+    if set(NAMING_FIELDS) & row.keys():
+        raise ValueError("Naming metadata belongs in the workload header")
+    for name in ("source_revision", "series_id", "item_id", "frequency",
                  "start_timestamp"):
         if not isinstance(row[name], str) or not row[name]:
             raise ValueError(f"{name} must be a nonempty string")
+    _validate_names(row, naming)
     if not isinstance(row["source_sha256"], str) or not re.fullmatch(r"[0-9a-fA-F]{64}", row["source_sha256"]):
         raise ValueError("source_sha256 must contain 64 hexadecimal characters")
     if not isinstance(row["source_path"], str) or not row["source_path"]:
@@ -173,6 +217,7 @@ def plan(workload: dict, models: dict, *, base_dir: Path) -> dict:
         raise ValueError("Workload must use the development split and explicit fixture boolean")
     if workload.get("quantiles") != list(TAUS) or not isinstance(workload.get("rows"), list) or not workload["rows"]:
         raise ValueError("Workload requires the exact quantile grid and nonempty rows")
+    naming = _naming(workload)
     if not isinstance(models, dict) or models.get("schema_version") != 1:
         raise ValueError("Models schema_version must be 1")
     if not isinstance(models.get("models"), list) or not models["models"]:
@@ -193,12 +238,13 @@ def plan(workload: dict, models: dict, *, base_dir: Path) -> dict:
         if model["device"] not in ("cpu", "cuda"):
             raise ValueError("Model device must be cpu or cuda")
         _plain_int(model["batch_size"], "batch_size", minimum=1)
-        protected = (set(ROW_FIELDS) | {"source_path", "schema_version", "fixture", "quantiles",
+        protected = (set(ROW_FIELDS) | set(NAMING_FIELDS) | {"source_path", "schema_version", "fixture", "quantiles",
                                        "implementation_sha256", "environment_sha256"}) - set(MODEL_FIELDS)
         if protected & model.keys():
             raise ValueError("Model contains protected workload or identity fields")
 
-    cleaned = [_validate_row(row, fixture, base_dir) for row in workload["rows"]]
+    cleaned = [_validate_row(row, fixture, base_dir, naming) for row in workload["rows"]]
+    validate_series_mappings([dict(row, **naming) for row, _ in cleaned])
     logical = set()
     for row, _ in cleaned:
         key = tuple(row[field] for field in ("dataset", "config", "source_revision", "source_sha256",
@@ -218,7 +264,7 @@ def plan(workload: dict, models: dict, *, base_dir: Path) -> dict:
     for row, source_path in cleaned:
         for model in models["models"]:
             configured = {field: model[field] for field in MODEL_FIELDS}
-            job = dict(schema_version=2, fixture=fixture, quantiles=list(TAUS), **row, **configured,
+            job = dict(schema_version=2, fixture=fixture, quantiles=list(TAUS), **row, **naming, **configured,
                        implementation_sha256=implementation_hash,
                        environment_sha256=environment_hash)
             validate_adapter(job)

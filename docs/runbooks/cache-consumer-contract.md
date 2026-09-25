@@ -1,5 +1,10 @@
 # Cache handoff for Veer — issue #3
 
+For the proposed production dataset/config naming, exact timestamp examples and
+the shared distinct-quantile fixture, see the
+[production handoff](production-cache-handoff.md) and issue #45. The historical
+column meanings and evidence below remain unchanged.
+
 This documents the actual published v1 smoke cache. It is usable now for decision
 engine fixtures; it does not freeze the production workload, stable-ID algorithm,
 model roster, or new forecasting methods. Follow-up under parent #3: make the
