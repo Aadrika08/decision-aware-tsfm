@@ -1,0 +1,170 @@
+{
+  "fixture": true,
+  "code_commit": "ee274714d929cf423c1534ef233e71e2cf6c7087",
+  "plan_provenance": {
+    "environment": {
+      "python": "3.11.15",
+      "numpy": "1.26.4",
+      "scipy": "1.11.4",
+      "pandas": "2.2.3",
+      "pyarrow": "16.1.0",
+      "torch": "2.4.1",
+      "uni2ts": "2.0.0"
+    },
+    "git_commit": "ee274714d929cf423c1534ef233e71e2cf6c7087",
+    "implementation_sha256": "9cb73f725aa0930cadb29268204ec15b4540cf07e1e2ee2eb83d8733760e94e7",
+    "environment_sha256": "5296bad226eb2f8d27becf50c7e6e2b5418b66c34c15f83c40493e034841e166"
+  },
+  "planned_jobs": 24,
+  "planned_rows": 1544,
+  "limited_generated": 3,
+  "resumed_generated": 21,
+  "resumed_skipped": 3,
+  "complete_resume_generated": 0,
+  "complete_resume_skipped": 24,
+  "unchanged_completed_partitions": true,
+  "resumed_equals_uninterrupted": true,
+  "budget_status": "incomplete",
+  "budget_reasons": [
+    "cpu: missing hardware identity",
+    "cpu: missing loading overhead evidence",
+    "cpu: missing I/O overhead evidence",
+    "cpu: no compatible timing evidence",
+    "fixture projection is not a real compute budget"
+  ],
+  "steps": [
+    {
+      "name": "fixture",
+      "command": [
+        "python",
+        "scripts/forecast_cache.py",
+        "fixture",
+        "artifacts/runs/fixture-verification-20260919-203915/inputs"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.31669388899899786
+    },
+    {
+      "name": "plan-output",
+      "command": [
+        "python",
+        "scripts/forecast_cache.py",
+        "plan",
+        "--workload",
+        "artifacts/runs/fixture-verification-20260919-203915/inputs/workload.json",
+        "--models",
+        "artifacts/runs/fixture-verification-20260919-203915/inputs/models.json",
+        "--output",
+        "artifacts/runs/fixture-verification-20260919-203915/plan.json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.8165504900025553
+    },
+    {
+      "name": "limited",
+      "command": [
+        "python",
+        "scripts/forecast_cache.py",
+        "generate",
+        "--plan-file",
+        "artifacts/runs/fixture-verification-20260919-203915/plan.json",
+        "--cache",
+        "artifacts/runs/fixture-verification-20260919-203915/resumed-cache",
+        "--workers",
+        "2",
+        "--limit-jobs",
+        "3"
+      ],
+      "exit_code": 2,
+      "elapsed_seconds": 1.436934241995914
+    },
+    {
+      "name": "resumed",
+      "command": [
+        "python",
+        "scripts/forecast_cache.py",
+        "generate",
+        "--plan-file",
+        "artifacts/runs/fixture-verification-20260919-203915/plan.json",
+        "--cache",
+        "artifacts/runs/fixture-verification-20260919-203915/resumed-cache",
+        "--workers",
+        "2"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 1.787242928003252
+    },
+    {
+      "name": "completed-resume",
+      "command": [
+        "python",
+        "scripts/forecast_cache.py",
+        "generate",
+        "--plan-file",
+        "artifacts/runs/fixture-verification-20260919-203915/plan.json",
+        "--cache",
+        "artifacts/runs/fixture-verification-20260919-203915/resumed-cache",
+        "--workers",
+        "2"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 1.0572819859953597
+    },
+    {
+      "name": "audit",
+      "command": [
+        "python",
+        "scripts/forecast_cache.py",
+        "audit",
+        "--plan-file",
+        "artifacts/runs/fixture-verification-20260919-203915/plan.json",
+        "--cache",
+        "artifacts/runs/fixture-verification-20260919-203915/resumed-cache"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.7786385680010426
+    },
+    {
+      "name": "uninterrupted",
+      "command": [
+        "python",
+        "scripts/forecast_cache.py",
+        "generate",
+        "--plan-file",
+        "artifacts/runs/fixture-verification-20260919-203915/plan.json",
+        "--cache",
+        "artifacts/runs/fixture-verification-20260919-203915/clean-cache",
+        "--workers",
+        "2"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 1.5147792069983552
+    },
+    {
+      "name": "budget",
+      "command": [
+        "python",
+        "scripts/forecast_cache.py",
+        "budget",
+        "--plan-file",
+        "artifacts/runs/fixture-verification-20260919-203915/plan.json",
+        "--measurements",
+        "artifacts/runs/fixture-verification-20260919-203915/limited.json",
+        "artifacts/runs/fixture-verification-20260919-203915/resumed.json",
+        "artifacts/runs/fixture-verification-20260919-203915/uninterrupted.json"
+      ],
+      "exit_code": 2,
+      "elapsed_seconds": 0.20301173700136133
+    }
+  ],
+  "artifact_directory": "artifacts/runs/fixture-verification-20260919-203915",
+  "tests": {
+    "command": "PYTHONPATH=src python -m unittest discover -v",
+    "exit_code": 0,
+    "wall_seconds": 15.455753733003803,
+    "test_count": 60,
+    "failures": 0,
+    "skips": 0
+  },
+  "historical_release_sha256": "9d2e50d43b7898d88ecbfc70cd3642f0b142eb1155bd1574bf1974c9229a6876"
+}

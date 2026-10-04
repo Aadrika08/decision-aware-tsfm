@@ -25,10 +25,11 @@ env/
 
 # Data and forecast caches — never commit these.
 # Predictions are regenerated from the cache contract, not from git.
-data/
-cache/
-outputs/
-results/
+/data/
+/cache/
+/outputs/
+/results/
+/artifacts/runs/
 *.parquet
 *.arrow
 *.feather

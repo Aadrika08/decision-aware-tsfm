@@ -1,0 +1,3 @@
+# Issue #20 only. Preserve every historical smoke pin; add classical qualification.
+-r smoke.txt
+statsforecast==2.1.1

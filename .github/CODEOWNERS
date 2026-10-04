@@ -1,0 +1,13 @@
+# Feature-area owners. GitHub maps commit-email owners to collaborators with write access.
+/src/decision_aware_tsfm/omega/ ddu17381@gmail.com
+/src/decision_aware_tsfm/data/ ddu17381@gmail.com
+/src/decision_aware_tsfm/cache/ aadrikamaurya@gmail.com
+/src/decision_aware_tsfm/analysis/k2/ veerbinoyparekh@gmail.com
+/src/decision_aware_tsfm/analysis/k3/ abdullahadnann142@gmail.com
+
+# Shared research contracts require the repository maintainer's review.
+/src/decision_aware_tsfm/contracts/ aadrikamaurya@gmail.com
+/configs/ aadrikamaurya@gmail.com
+/requirements/ aadrikamaurya@gmail.com
+/pyproject.toml aadrikamaurya@gmail.com
+/docs/decisions/ aadrikamaurya@gmail.com
