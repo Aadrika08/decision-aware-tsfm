@@ -187,3 +187,32 @@ def test_distinct_omega_count_reported_not_hidden(tmp_path):
     same = (("s0", 0.4), ("s1", 0.4), ("s2", 0.4))
     _, _, report = run(tmp_path, build_cache(tmp_path, series=same), omega_doc(series=same))
     assert report["distinct_omega"] == 1
+
+
+# ------------------ Aadrika's review: provenance mandatory for real inputs
+def test_real_partition_without_provenance_rejected(tmp_path):
+    """A real job carrying no source metadata must fail, not be skipped."""
+    hashes = build_cache(tmp_path)
+    name = "s0_classical_m.parquet"
+    write_job(tmp_path / name, "s0:classical_m", "s0", 5000, "classical_m", "classical",
+              pred=9.0, job_meta=None)  # no job metadata at all
+    hashes[name] = hashlib.sha256((tmp_path / name).read_bytes()).hexdigest()
+    with pytest.raises(K3InputError, match="provenance is mandatory"):
+        run(tmp_path, hashes, omega_doc())
+
+
+def test_fixture_inputs_do_not_require_provenance(tmp_path):
+    pq.write_table(decision_fixture(), tmp_path / "fixture.parquet")
+    hashes = {"fixture.parquet": hashlib.sha256((tmp_path / "fixture.parquet").read_bytes()).hexdigest()}
+    doc = omega_doc(series=(("fixture_series_0", 0.4),), origin=1000, fixture=True)
+    for row in doc["rows"]:
+        row.update(dataset="synthetic_fixture")
+    _, _, report = run(tmp_path, hashes, doc, allow_fixture=True)
+    assert report["status"] == "fixture_valid"
+    assert report["provenance_required"] is False
+
+
+def test_real_inputs_report_provenance_required(tmp_path):
+    _, _, report = run(tmp_path, build_cache(tmp_path), omega_doc())
+    assert report["provenance_required"] is True
+    assert report["provenance_checked_jobs"] == 6
