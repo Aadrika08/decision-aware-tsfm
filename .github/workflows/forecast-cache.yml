@@ -32,3 +32,9 @@ jobs:
         run: gh release download v0.1.0-smoke --pattern forecast-smoke-sample.zip --dir cache
       - name: Test cache contracts and recovery
         run: python -m unittest tests.integration.test_cache_schema tests.integration.test_smoke_release tests.integration.test_cache_adapters tests.integration.test_cache_planner tests.integration.test_cache_executor tests.integration.test_cache_budget tests.integration.test_forecast_cache_cli tests.integration.test_pilot_adapters tests.integration.test_pilot_qualification tests.integration.test_pilot_readiness tests.integration.test_pilot_measurement -v
+      - name: Check out the pinned consumer fixture source
+        run: git worktree add --detach artifacts/runs/decision-fixture-source dd9505d2389a191327e4fb5da937a8c0b289a6a1
+      - name: Verify the shared consumer handoff
+        env:
+          DECISION_FIXTURE_SOURCE: artifacts/runs/decision-fixture-source
+        run: python -m unittest tests.integration.test_consumer_handoff -v

@@ -173,7 +173,7 @@ def generation_lock(cache):
 def _guard_source(job):
     path = Path(job.get("source_path", ""))
     raw = tuple(job.get(field, "") for field in
-                ("source_revision", "dataset", "config", "series_id", "item_id")) + (str(path),)
+                ("source_revision", "source_repository", "dataset", "config", "series_id", "item_id")) + (str(path),)
     if any(planner._held_out(value) for value in raw):
         raise ValueError("M5 and PJM are held out and cannot be accessed")
     if planner._held_out(path.resolve(strict=False)):
@@ -516,6 +516,8 @@ def _planned_jobs(plan, *, generate=False):
         raise ValueError("Plan contains duplicate job IDs")
     if any(job.get("fixture") != plan.get("fixture") for job in jobs):
         raise ValueError("Plan mixes fixture and real jobs")
+    if len({tuple(job.get(field) for field in planner.NAMING_FIELDS) for job in jobs}) != 1:
+        raise ValueError("Plan mixes naming conventions")
     current_implementation = planner._implementation() if generate else None
     current_environment = (_sha(planner.canonical(planner._environment()).encode())
                            if generate else None)
@@ -527,6 +529,7 @@ def _planned_jobs(plan, *, generate=False):
         if generate and (job["implementation_sha256"] != current_implementation
                          or job["environment_sha256"] != current_environment):
             raise ValueError("Plan implementation or environment fingerprint differs from this executor")
+    planner.validate_series_mappings(jobs)
     return jobs
 
 
@@ -564,7 +567,8 @@ def audit(plan, cache):
         if len(found) != 1:
             continue
         table = found[0][1]
-        key = (job["dataset"], job["config"], job["series_id"], job["source_sha256"],
+        key = (job.get("source_repository"), job["dataset"], job["config"], job["series_id"],
+               job["item_id"], job["channel"], job["source_sha256"],
                job["origin"], job["horizon"])
         actual = np.asarray(table["y_true"].to_pylist())
         if key in actuals and not np.array_equal(actual, actuals[key]):

@@ -45,6 +45,13 @@ costs `1-tau` and `4*(1-tau)`. These are planted checks, not research measuremen
 
 ## Inputs and identities
 
+The proposed production naming extension is documented in the
+[production handoff](production-cache-handoff.md) and ADR 0006. Set both header
+fields `naming_scheme: "dataset-config-v1"` and the actual `source_repository` to
+use separate dataset/config values and an explicit empty config for no variant.
+Both values are hashed into each job. Omitting both retains the historical
+convention; partial/unknown headers and mixed naming plans are rejected.
+
 The JSON workload uses `schema_version: 1`, `split: "development"`, an explicit
 `fixture` boolean, the exact eleven-value `quantiles` list, and nonempty `rows`.
 Each row contains:

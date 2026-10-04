@@ -74,6 +74,32 @@ class PilotReadinessTest(unittest.TestCase):
         self.assertEqual(original["jobs"], reordered["jobs"])
         self.assertEqual(original_first["jobs"], first["jobs"])
 
+    def test_production_naming_header_matches_omega_handoff(self):
+        names = dict(naming_scheme="dataset-config-v1", source_repository="invented/fixture")
+        self.workload.update(names)
+        self.omega.update(names)
+        for row in self.workload["rows"] + self.omega["rows"]:
+            row["dataset"], row["config"] = "invented", row["series_id"][-1:]
+        report, full, _ = self.inspect()
+        self.assertEqual(report["status"], "fixture_valid", report)
+        self.assertTrue(all(job["source_repository"] == names["source_repository"] for job in full["jobs"]))
+        for broken in (dict(names, source_repository="different/fixture"),
+                       {"naming_scheme": "dataset-config-v1"}, {}):
+            self.omega = dict(self.omega)
+            self.omega.pop("naming_scheme", None)
+            self.omega.pop("source_repository", None)
+            self.omega.update(broken)
+            with self.subTest(broken=broken), patch("decision_aware_tsfm.cache.readiness.load_source") as reader:
+                report, full, _ = self.inspect()
+                self.assertEqual(report["status"], "blocked")
+                self.assertIsNone(full)
+                reader.assert_not_called()
+        self.omega.update(names)
+        self.omega["rows"][0]["source_repository"] = names["source_repository"]
+        report, full, _ = self.inspect()
+        self.assertEqual(report["status"], "blocked")
+        self.assertIsNone(full)
+
     def test_missing_coverage_and_bad_omega_fail_before_source_access(self):
         scenarios = ("missing_job", "missing_omega", "future_omega", "duplicate_omega",
                      "wrong_hash", "bad_cap", "nan_omega", "missing_description", "same_omega")
