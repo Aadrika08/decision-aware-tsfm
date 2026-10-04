@@ -143,3 +143,44 @@ def test_malformed_input_raises():
         oracle_value_best_threshold([0.1, 0.2], [1, 2, 3], [1, 2])
     with pytest.raises(ValueError):
         fit_monotone_boundary([0.1, 0.2, 0.3], [1, 2, 3], direction="sideways")
+
+
+# --------------- Veer's sign-off condition: count per dataset, not per series
+def test_many_series_from_one_dataset_are_not_enough(tmp_path=None):
+    """30 series from a single dataset is one dataset's worth of evidence."""
+    omega, c, t = planted(n=30)
+    datasets = ["ett1_H"] * 30
+    delta = family_cost_difference(c, t)
+
+    for result in (count_sign_reversals(omega, delta, datasets=datasets),
+                   fit_monotone_boundary(omega, delta, datasets=datasets),
+                   oracle_value_best_threshold(omega, c, t, datasets=datasets)):
+        assert result["status"] == "insufficient_data"
+        assert result["unit"] == "dataset"
+        assert result["n_distinct_omega"] == 1
+
+    # the same data without labels still passes the weaker per-value count
+    assert count_sign_reversals(omega, delta)["status"] == "ok"
+
+
+def test_three_datasets_clear_the_monotone_floor(tmp_path=None):
+    omega, c, t = planted(n=30)
+    datasets = ["ett1_H"] * 10 + ["electricity_15T"] * 10 + ["solar_10T"] * 10
+    result = count_sign_reversals(omega, family_cost_difference(c, t), datasets=datasets)
+    assert result["status"] == "ok"
+    assert result["unit"] == "dataset" and result["n_distinct_omega"] == 3
+
+
+def test_flexible_fit_needs_eight_datasets(tmp_path=None):
+    omega, c, t = planted(n=40)
+    datasets = [f"dataset_{i % 5}" for i in range(40)]  # 5 datasets, below the 8 floor
+    fit = fit_monotone_boundary(omega, family_cost_difference(c, t), datasets=datasets)
+    assert fit["status"] == "ok" and fit["n_distinct_omega"] == 5
+    assert fit["flexible"]["status"] == "insufficient_data"
+    assert fit["flexible"]["unit"] == "dataset"
+
+
+def test_mismatched_dataset_labels_raise(tmp_path=None):
+    omega, c, t = planted(n=10)
+    with pytest.raises(ValueError, match="datasets length"):
+        count_sign_reversals(omega, family_cost_difference(c, t), datasets=["a", "b"])
