@@ -170,8 +170,13 @@ def load_omega(path, allow_fixture=False):
 
 
 # -------------------------------------------------------------------- join
-def join_omega(table, job_meta, omega, variant):
-    """Attach one Omega variant to every cache (dataset, config, series_id, origin)."""
+def join_omega(table, job_meta, omega, variant, require_provenance=True):
+    """Attach one Omega variant to every cache (dataset, config, series_id, origin).
+
+    With require_provenance (the default for real inputs), every job must carry
+    source revision/hash metadata and it must match the Omega row. A real
+    partition without that metadata is refused rather than silently skipped.
+    """
     if variant not in omega["variants"]:
         _fail("Requested variant not declared", [variant])
 
@@ -179,6 +184,15 @@ def join_omega(table, job_meta, omega, variant):
     missing = sorted(k for k in keys if k not in omega["by_source"])
     if missing:
         _fail("Cache series/origins with no Omega row", missing)
+
+    if require_provenance:
+        unprovenanced = sorted(
+            job_id for job_id in set(table["job_id"].to_pylist())
+            if "source_revision" not in job_meta.get(job_id, {})
+            or "source_sha256" not in job_meta.get(job_id, {}))
+        if unprovenanced:
+            _fail("Jobs without source revision/hash metadata; provenance is "
+                  "mandatory for real inputs", unprovenanced)
 
     mismatched, checked = [], 0
     for job_id, job in job_meta.items():
@@ -241,13 +255,16 @@ def load_k3_inputs(base_dir, partition_hashes, omega_path, variant, allow_fixtur
     if cache_fixture and not allow_fixture:
         _fail("Fixture cache refused; pass allow_fixture=True only for tests")
     omega = load_omega(omega_path, allow_fixture=allow_fixture)
-    omega_by_key, join_report = join_omega(table, job_meta, omega, variant)
+    is_fixture = cache_fixture or omega["fixture"]
+    omega_by_key, join_report = join_omega(table, job_meta, omega, variant,
+                                           require_provenance=not is_fixture)
     checks = k3_input_checks(table)
 
     values = np.array(list(omega_by_key.values()), dtype=float)
     distinct = len(np.unique(values))
     report = {
-        "status": "fixture_valid" if (cache_fixture or omega["fixture"]) else "ok",
+        "status": "fixture_valid" if is_fixture else "ok",
+        "provenance_required": not is_fixture,
         "variant": variant,
         "partitions": len(partition_hashes),
         "rows": len(table),
