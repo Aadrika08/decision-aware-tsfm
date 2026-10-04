@@ -12,6 +12,8 @@ Fixes relative to the feasibility-sprint skeleton (#13):
   3. Both threshold orientations are tested (classical-below and TSFM-below).
   4. Oracle value is measured against the BEST fixed family by default.
   5. Too little data returns an explicit `insufficient_data` result.
+  6. Sufficiency is counted per dataset when dataset labels are supplied, so
+     many series from one dataset do not count as independent evidence (#32).
 
 Malformed input (wrong shape, non-finite values) raises ValueError. That is
 a different condition from "valid but insufficient" and must not be confused
@@ -32,9 +34,25 @@ DIRECTIONS = ("increasing", "decreasing")
 
 
 # ----------------------------------------------------------------- helpers
-def insufficient_data(reason, n_distinct_omega, required):
-    return {"status": "insufficient_data", "reason": reason,
+def insufficient_data(reason, n_distinct_omega, required, unit="omega_value"):
+    return {"status": "insufficient_data", "reason": reason, "unit": unit,
             "n_distinct_omega": int(n_distinct_omega), "required": int(required)}
+
+
+def distinct_count(omega, datasets=None):
+    """How many independent Omega points are available.
+
+    With dataset labels, count distinct datasets: many series from one dataset
+    share a source and are not independent evidence for a boundary (#32, Veer's
+    sign-off condition). Without labels, fall back to distinct Omega values and
+    say so in the reported unit.
+    """
+    if datasets is None:
+        return len(np.unique(np.asarray(omega))), "omega_value"
+    datasets = np.asarray(datasets)
+    if datasets.shape != np.asarray(omega).shape:
+        raise ValueError("datasets length must match omega")
+    return len(np.unique(datasets)), "dataset"
 
 
 def _as_1d_finite(name, values):
@@ -72,7 +90,8 @@ def family_cost_difference(cost_classical, cost_tsfm):
 
 
 # ------------------------------------------------------- 2. sign reversals
-def count_sign_reversals(omega, delta, min_distinct=MIN_DISTINCT_OMEGA_THRESHOLD):
+def count_sign_reversals(omega, delta, datasets=None,
+                         min_distinct=MIN_DISTINCT_OMEGA_THRESHOLD):
     """Count flips in the winning family as Omega increases.
 
     Series with identical Omega are averaged first so ordering among ties
@@ -80,15 +99,16 @@ def count_sign_reversals(omega, delta, min_distinct=MIN_DISTINCT_OMEGA_THRESHOLD
     dropped rather than counted as a flip.
     """
     omega, delta = _validate(omega, delta)
-    n_distinct = len(np.unique(omega))
+    n_distinct, unit = distinct_count(omega, datasets)
     if n_distinct < min_distinct:
-        return insufficient_data("too few distinct Omega values", n_distinct, min_distinct)
+        return insufficient_data(f"too few distinct Omega {unit}s", n_distinct,
+                                 min_distinct, unit)
 
     _, mean_delta = _collapse_ties(omega, delta)
     signs = np.sign(mean_delta)
     signs = signs[signs != 0]
     reversals = int(np.sum(np.diff(signs) != 0)) if len(signs) > 1 else 0
-    return {"status": "ok", "sign_reversals": reversals,
+    return {"status": "ok", "sign_reversals": reversals, "unit": unit,
             "n_distinct_omega": n_distinct, "n_series": len(omega)}
 
 
@@ -113,7 +133,7 @@ def _cv_mse(x, y, make_predict, groups, n_splits):
     return float(np.mean(np.concatenate(errors)))
 
 
-def fit_monotone_boundary(omega, delta, direction="both", groups=None, n_splits=5,
+def fit_monotone_boundary(omega, delta, direction="both", datasets=None, groups=None, n_splits=5,
                           min_distinct_monotone=MIN_DISTINCT_OMEGA_THRESHOLD,
                           min_distinct_flexible=MIN_DISTINCT_OMEGA_FLEXIBLE):
     """Compare monotone fits with an unconstrained flexible fit.
@@ -133,18 +153,19 @@ def fit_monotone_boundary(omega, delta, direction="both", groups=None, n_splits=
         if groups.shape != omega.shape:
             raise ValueError("groups length must match omega")
 
-    n_distinct = len(np.unique(omega))
+    n_distinct, unit = distinct_count(omega, datasets)
     if n_distinct < min_distinct_monotone:
-        return insufficient_data("too few distinct Omega values for any fit",
-                                 n_distinct, min_distinct_monotone)
+        return insufficient_data(f"too few distinct Omega {unit}s for any fit",
+                                 n_distinct, min_distinct_monotone, unit)
 
     n_folds = min(n_splits, len(np.unique(groups)) if groups is not None else len(omega))
     if n_folds < 2:
-        return insufficient_data("too few series/groups for cross-validation", n_distinct, 2)
+        return insufficient_data("too few series/groups for cross-validation",
+                                 n_distinct, 2, unit)
 
     order = np.argsort(omega)
     x_sorted, y_sorted = omega[order], delta[order]
-    result = {"status": "ok", "n_distinct_omega": n_distinct, "n_series": len(omega),
+    result = {"status": "ok", "n_distinct_omega": n_distinct, "unit": unit, "n_series": len(omega),
               "direction_mode": direction, "monotone": {}}
 
     for d in (DIRECTIONS if direction == "both" else (direction,)):
@@ -162,8 +183,8 @@ def fit_monotone_boundary(omega, delta, direction="both", groups=None, n_splits=
 
     if n_distinct < min_distinct_flexible:
         result["flexible"] = insufficient_data(
-            "too few distinct Omega values for a flexible curve",
-            n_distinct, min_distinct_flexible)
+            f"too few distinct Omega {unit}s for a flexible curve",
+            n_distinct, min_distinct_flexible, unit)
     else:
         degree = min(3, n_distinct - 2)
 
@@ -176,7 +197,8 @@ def fit_monotone_boundary(omega, delta, direction="both", groups=None, n_splits=
 
 
 # ------------------------------------------------- 4. oracle value captured
-def oracle_value_best_threshold(omega, cost_classical, cost_tsfm, baseline="best_fixed",
+def oracle_value_best_threshold(omega, cost_classical, cost_tsfm, datasets=None,
+                                baseline="best_fixed",
                                 min_distinct=MIN_DISTINCT_OMEGA_THRESHOLD):
     """How much of the oracle's advantage does the best single Omega threshold
     recover, relative to a fixed-family baseline?
@@ -194,9 +216,10 @@ def oracle_value_best_threshold(omega, cost_classical, cost_tsfm, baseline="best
     if baseline not in ("best_fixed", "worst_fixed"):
         raise ValueError("baseline must be 'best_fixed' or 'worst_fixed'")
     omega, c, t = _validate(omega, cost_classical, cost_tsfm)
-    n_distinct = len(np.unique(omega))
+    n_distinct, unit = distinct_count(omega, datasets)
     if n_distinct < min_distinct:
-        return insufficient_data("too few distinct Omega values", n_distinct, min_distinct)
+        return insufficient_data(f"too few distinct Omega {unit}s", n_distinct,
+                                 min_distinct, unit)
 
     always_classical, always_tsfm = float(c.sum()), float(t.sum())
     oracle = float(np.minimum(c, t).sum())
@@ -221,7 +244,7 @@ def oracle_value_best_threshold(omega, cost_classical, cost_tsfm, baseline="best
 
     best_orient = min(ORIENTATIONS, key=lambda o: per_orientation[o]["cost"])
     gap = base - oracle
-    out = {"status": "ok", "baseline": baseline, "n_distinct_omega": n_distinct,
+    out = {"status": "ok", "baseline": baseline, "n_distinct_omega": n_distinct, "unit": unit,
            "always_classical_cost": always_classical, "always_tsfm_cost": always_tsfm,
            "oracle_cost": oracle, "baseline_cost": base,
            "orientations": per_orientation, "best_orientation": best_orient}
