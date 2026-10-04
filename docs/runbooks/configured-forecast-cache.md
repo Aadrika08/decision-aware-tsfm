@@ -11,6 +11,8 @@ selection waits for expansion. The methods are now accepted in
 [ADR 0005](../decisions/0005-pilot-adapter-qualification.md), with a
 [completed synthetic qualification](../results/cache/2026-09-21-pilot-adapter-qualification.md).
 The approved real workload is still missing. No real pilot or full grid is claimed here.
+The [development pilot runbook](development-pilot.md) now provides handoff validation,
+the first comparison slice, Linux measurement commands and consumer acceptance checks.
 
 ## Run the complete fixture flow
 
