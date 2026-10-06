@@ -112,6 +112,19 @@ class HindsightOracle:
         return _decisions(inp.units, argmin_family(t["J_classical"], t["J_tsfm"]))
 
 
+@dataclass(frozen=True)
+class NotFitted:
+    """Stands in for a selector that could not be fitted (e.g. no fit-only data).
+    Every unit is reported as insufficient_data, with the reason in the note."""
+    name: str
+    reason: str
+    needs_hindsight: bool = False
+
+    def select(self, inp):
+        fam = np.full(len(inp.units), None, dtype=object)
+        return _decisions(inp.units, fam, f"not fitted: {self.reason}")
+
+
 DEFAULT_BETA_GRID = (-0.5, -0.25, -0.1, 0.0, 0.1, 0.25, 0.5)
 
 

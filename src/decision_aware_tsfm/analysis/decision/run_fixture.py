@@ -24,8 +24,8 @@ def main():
     print(f"fixture: {len(fc):,} forecast rows, {fc.series_id.nunique()} series, "
           f"{fc.model.nunique()} models, horizons {sorted(int(h) for h in fc.horizon.unique())}")
     fc.to_parquet(out / "fixture_cache.parquet", index=False)
-    omega.to_csv(out / "fixture_omega.csv", index=False)
-    planted.to_csv(out / "planted_answers.csv", index=False)
+    omega.to_csv(out / "fixture_omega.csv", index=False, lineterminator="\n")
+    planted.to_csv(out / "planted_answers.csv", index=False, lineterminator="\n")
 
     tables = build_tables(out / "fixture_cache.parquet", FIXTURE_SCHEMA, REPRESENTATIVES,
                           FAMILY_OF_MODEL, omega, fit_only_datasets=FIT_ONLY_DATASETS)
@@ -36,7 +36,7 @@ def main():
     res.to_parquet(out / "selection_results.parquet", index=False)
 
     s = summarize(res, by=("selector", "dataset"))
-    s.to_csv(out / "summary_by_dataset.csv", index=False)
+    s.to_csv(out / "summary_by_dataset.csv", index=False, lineterminator="\n")
     print("\nmean scaled regret by selector and dataset (both horizons, all 11 tau):")
     print(s.pivot(index="selector", columns="dataset", values="mean_scaled_regret").round(5))
 
