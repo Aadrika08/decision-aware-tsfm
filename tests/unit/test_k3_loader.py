@@ -177,10 +177,13 @@ def test_duplicate_omega_row_rejected(tmp_path):
         run(tmp_path, build_cache(tmp_path), omega_doc(mutate=dup))
 
 
-def test_missing_omega_value_rejected(tmp_path):
+def test_bare_null_omega_rejected(tmp_path):
+    """A null without a reason is indistinguishable from a dropped field."""
     def blank(doc):
-        doc["rows"][0]["omega"] = None  # undefined Omega needs an upstream decision
-    with pytest.raises(K3InputError, match="missing or wrong type"):
+        for row in doc["rows"]:
+            if row["series_id"] == "s1":
+                row["omega"] = None
+    with pytest.raises(K3InputError, match="needs a non-empty omega_undefined_reason"):
         run(tmp_path, build_cache(tmp_path), omega_doc(mutate=blank))
 
 
@@ -334,3 +337,72 @@ def test_blank_repository_rejected(tmp_path):
         doc["source_repository"] = "   "
     with pytest.raises(K3InputError, match="source_repository"):
         run(tmp_path, build_cache(tmp_path), omega_doc(mutate=blank))
+
+
+
+# ------- undefined Omega: null with a reason, carried through for deferral
+def _undefine(series_id, reason="flat history: zero variance"):
+    def mutate(doc):
+        for row in doc["rows"]:
+            if row["series_id"] == series_id:
+                row["omega"] = None
+                row["omega_undefined_reason"] = reason
+    return mutate
+
+
+def test_null_omega_with_reason_is_carried_through(tmp_path):
+    _, omega, report = run(tmp_path, build_cache(tmp_path),
+                           omega_doc(mutate=_undefine("s1")))
+    assert report["status"] == "ok"
+    assert omega[("synthetic", "hourly", "s1", 5000)] is None
+    assert report["undefined_omega"] == 1
+    assert report["undefined_omega_reasons"] == ["flat history: zero variance"]
+
+
+def test_null_omega_excluded_from_counts_and_bands(tmp_path):
+    _, _, report = run(tmp_path, build_cache(tmp_path), omega_doc(mutate=_undefine("s1")))
+    assert report["distinct_omega"] == 2           # s1 no longer counted
+    assert report["omega_range"] == [0.2, 0.8]     # s1's 0.5 gone from the range
+    bands = report["omega_band_coverage"]
+    assert bands["undefined"]["series_origins"] == 1
+    assert bands["undefined"]["datasets"] == ["synthetic"]
+    assert sum(bands[b]["series_origins"] for b in
+               ("below_0.40", "0.40_to_0.50", "above_0.50")) == 2
+
+
+def test_zero_offered_as_undefined_rejected(tmp_path):
+    """0.0 must not be dressed up as undefined; it reads as a real low Omega."""
+    def zero(doc):
+        for row in doc["rows"]:
+            if row["series_id"] == "s1":
+                row["omega"] = 0.0
+                row["omega_undefined_reason"] = "flat history"
+    with pytest.raises(K3InputError, match="reason set on a defined omega"):
+        run(tmp_path, build_cache(tmp_path), omega_doc(mutate=zero))
+
+
+def test_blank_reason_rejected(tmp_path):
+    with pytest.raises(K3InputError, match="needs a non-empty omega_undefined_reason"):
+        run(tmp_path, build_cache(tmp_path), omega_doc(mutate=_undefine("s1", "   ")))
+
+
+def test_undefined_in_one_variant_only_rejected(tmp_path):
+    def half(doc):
+        for row in doc["rows"]:
+            if row["series_id"] == "s1" and row["variant"] == "current":
+                row["omega"] = None
+                row["omega_undefined_reason"] = "flat history"
+    with pytest.raises(K3InputError, match="undefined in some variants but not others"):
+        run(tmp_path, build_cache(tmp_path), omega_doc(mutate=half))
+
+
+def test_all_omega_undefined_reports_empty_range(tmp_path):
+    def nothing(doc):
+        for row in doc["rows"]:
+            row["omega"] = None
+            row["omega_undefined_reason"] = "flat history"
+    _, _, report = run(tmp_path, build_cache(tmp_path), omega_doc(mutate=nothing))
+    assert report["distinct_omega"] == 0
+    assert report["distinct_datasets"] == 0
+    assert report["omega_range"] is None
+    assert report["undefined_omega"] == 3
