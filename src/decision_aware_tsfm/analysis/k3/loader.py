@@ -16,11 +16,21 @@ Rules taken from docs/runbooks/cache-consumer-contract.md:
     global counter;
   * never attach Omega whose history extends past the forecast origin;
   * match actuals and windows across models before any comparison;
-  * one explicit Omega variant per analysis -- variants are never mixed.
+  * one explicit Omega variant per analysis -- variants are never mixed;
+  * production names follow dataset-config-v1: `dataset` and `config` are
+    separate fields and neither carries the legacy slash form, and a source
+    repository such as Salesforce/GiftEval is header provenance, never a
+    row's dataset name.
 
 PROVISIONAL: the Omega sidecar format is a proposal until Dayson's Stage 0
 export is agreed, and the per-partition hash list is assumed to be a mapping
 {relative_path: sha256}. Both may change; keep them isolated here.
+
+PROVISIONAL: the naming rules below are my reading of the producer contract
+("Names/repository" in #45). dataset-config-v1 is required for real inputs;
+NAMING_LEGACY exists only so the historical smoke release, whose rows carry
+dataset="Salesforce/GiftEval" and config="ett1/H", can still be read for
+comparison. Confirm before the real pilot.
 """
 import hashlib
 import json
@@ -36,8 +46,18 @@ import pyarrow.parquet as pq
 from decision_aware_tsfm.cache.schema import TAUS, validate_payload
 
 OMEGA_KEY = ("dataset", "config", "series_id", "origin")
+# Bands straddle the published rule's transition region (below 0.40 no clear
+# TSFM advantage, above 0.50 TSFM wins). Coverage is reported per band because
+# a count of distinct Omega values says nothing about where they sit: eight
+# values all above 0.50 are no evidence about a boundary at 0.45 (#32).
+OMEGA_BANDS = (("below_0.40", -float("inf"), 0.40),
+               ("0.40_to_0.50", 0.40, 0.50),
+               ("above_0.50", 0.50, float("inf")))
 COMPARISON_KEY = ("dataset", "config", "series_id", "origin", "horizon", "seed")
 CAP = {"last_4096": 4096}
+NAMING_V1 = "dataset-config-v1"
+NAMING_LEGACY = "legacy-slash-form"
+NAMINGS = (NAMING_V1, NAMING_LEGACY)
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -115,6 +135,9 @@ def load_omega(path, allow_fixture=False):
         _fail("Omega document must declare fixture: true/false")
     if doc["fixture"] and not allow_fixture:
         _fail("Fixture Omega refused; pass allow_fixture=True only for tests")
+    repository = doc.get("source_repository")
+    if repository is not None and (not isinstance(repository, str) or not repository.strip()):
+        _fail("source_repository must be a non-empty string when present")
     variants = doc.get("variants")
     if not isinstance(variants, dict) or not variants:
         _fail("Omega document must declare at least one variant with a description")
@@ -166,7 +189,8 @@ def load_omega(path, allow_fixture=False):
                     problems.append(f"{source}: {name} bounds inconsistent with current")
     if problems:
         _fail("Inconsistent Omega variants", problems)
-    return {"fixture": doc["fixture"], "variants": variants, "by_source": by_source}
+    return {"fixture": doc["fixture"], "variants": variants, "by_source": by_source,
+            "source_repository": repository}
 
 
 # -------------------------------------------------------------------- join
@@ -194,7 +218,7 @@ def join_omega(table, job_meta, omega, variant, require_provenance=True):
             _fail("Jobs without source revision/hash metadata; provenance is "
                   "mandatory for real inputs", unprovenanced)
 
-    mismatched, checked = [], 0
+    mismatched, wrong_repository, checked = [], [], 0
     for job_id, job in job_meta.items():
         if "source_revision" not in job or "source_sha256" not in job:
             continue
@@ -204,12 +228,66 @@ def join_omega(table, job_meta, omega, variant, require_provenance=True):
         checked += 1
         if (ref["source_revision"], ref["source_sha256"]) != (job["source_revision"], job["source_sha256"]):
             mismatched.append(key)
+        job_repository = job.get("source_repository")
+        if (omega["source_repository"] and job_repository
+                and job_repository != omega["source_repository"]):
+            wrong_repository.append((key, job_repository, omega["source_repository"]))
     if mismatched:
         _fail("Omega computed on a different source revision than the forecasts", mismatched)
+    if wrong_repository:
+        _fail("Omega and forecasts name different source repositories", wrong_repository)
 
     omega_by_key = {k: omega["by_source"][k][variant]["omega"] for k in keys}
     unused = sorted(set(omega["by_source"]) - keys)
-    return omega_by_key, {"provenance_checked_jobs": checked, "unused_omega_sources": len(unused)}
+    return omega_by_key, {"provenance_checked_jobs": checked,
+                          "unused_omega_sources": len(unused),
+                          "source_repository": omega["source_repository"]}
+
+
+def validate_naming(pairs, naming, where):
+    """Check (dataset, config) pairs against the agreed production naming.
+
+    Under dataset-config-v1 the two fields are separate: `dataset` is a source
+    name such as ett1 or m4, `config` is its variant such as H or daily and may
+    be empty for a source with no variant. Neither carries the legacy slash
+    form, and neither is a source repository: Salesforce/GiftEval is header
+    provenance, not a dataset name.
+    """
+    if naming not in NAMINGS:
+        _fail(f"Unknown naming scheme; expected one of {NAMINGS}", [naming])
+    if naming == NAMING_LEGACY:
+        return
+    problems = []
+    for dataset, config in sorted(pairs):
+        if not isinstance(dataset, str) or not dataset.strip():
+            problems.append(f"{where}: empty dataset")
+            continue
+        if "/" in dataset:
+            problems.append(
+                f"{where}: dataset {dataset!r} is in the legacy slash form; "
+                f"{NAMING_V1} wants separate dataset and config fields, with any "
+                "source repository recorded as header provenance instead")
+        if not isinstance(config, str):
+            problems.append(f"{where}: config for {dataset!r} is not a string")
+        elif "/" in config:
+            problems.append(f"{where}: config {config!r} is in the legacy slash form")
+    if problems:
+        _fail(f"Names do not follow {NAMING_V1}", problems)
+
+
+def omega_band_coverage(omega_by_key):
+    """Per band: how many datasets, series-origins and distinct Omega values."""
+    coverage = {}
+    for label, low, high in OMEGA_BANDS:
+        inside = {k: v for k, v in omega_by_key.items() if low <= v < high}
+        coverage[label] = {
+            "range": [None if low == -float("inf") else low,
+                      None if high == float("inf") else high],
+            "datasets": sorted({k[0] for k in inside}),
+            "series_origins": len(inside),
+            "distinct_omega": len({round(v, 12) for v in inside.values()}),
+        }
+    return coverage
 
 
 # ----------------------------------------------------------- K3 input checks
@@ -245,7 +323,8 @@ def k3_input_checks(table):
 
 
 # ------------------------------------------------------------------- entry
-def load_k3_inputs(base_dir, partition_hashes, omega_path, variant, allow_fixture=False):
+def load_k3_inputs(base_dir, partition_hashes, omega_path, variant,
+                   allow_fixture=False, naming=NAMING_V1):
     """Full K3 input path. Returns (table, omega_by_key, report).
 
     report["status"] is "ok" for real inputs and "fixture_valid" when any
@@ -256,6 +335,10 @@ def load_k3_inputs(base_dir, partition_hashes, omega_path, variant, allow_fixtur
         _fail("Fixture cache refused; pass allow_fixture=True only for tests")
     omega = load_omega(omega_path, allow_fixture=allow_fixture)
     is_fixture = cache_fixture or omega["fixture"]
+
+    validate_naming(set(zip(table["dataset"].to_pylist(), table["config"].to_pylist())),
+                    naming, "cache")
+    validate_naming({(k[0], k[1]) for k in omega["by_source"]}, naming, "omega sidecar")
     omega_by_key, join_report = join_omega(table, job_meta, omega, variant,
                                            require_provenance=not is_fixture)
     checks = k3_input_checks(table)
@@ -265,12 +348,15 @@ def load_k3_inputs(base_dir, partition_hashes, omega_path, variant, allow_fixtur
     report = {
         "status": "fixture_valid" if is_fixture else "ok",
         "provenance_required": not is_fixture,
+        "naming": naming,
         "variant": variant,
         "partitions": len(partition_hashes),
         "rows": len(table),
         **checks,
         **join_report,
         "distinct_omega": distinct,
+        "distinct_datasets": len({k[0] for k in omega_by_key}),
         "omega_range": [float(values.min()), float(values.max())],
+        "omega_band_coverage": omega_band_coverage(omega_by_key),
     }
     return table, omega_by_key, report
