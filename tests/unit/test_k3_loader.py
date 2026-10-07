@@ -7,6 +7,7 @@ import pyarrow.parquet as pq
 import pytest
 
 from decision_aware_tsfm.analysis.k3.loader import K3InputError, load_k3_inputs
+from decision_aware_tsfm.cache.schema import QCOLS, SCHEMA, decision_fixture  # noqa: F811
 from decision_aware_tsfm.cache.schema import QCOLS, SCHEMA, decision_fixture
 
 REV = "fixture-revision"
@@ -216,3 +217,120 @@ def test_real_inputs_report_provenance_required(tmp_path):
     _, _, report = run(tmp_path, build_cache(tmp_path), omega_doc())
     assert report["provenance_required"] is True
     assert report["provenance_checked_jobs"] == 6
+
+
+# ----------- Veer's second condition: coverage per Omega band, every result
+def test_band_coverage_reported(tmp_path):
+    series = (("s0", 0.22), ("s1", 0.45), ("s2", 0.78))
+    _, _, report = run(tmp_path, build_cache(tmp_path, series=series), omega_doc(series=series))
+    bands = report["omega_band_coverage"]
+    assert bands["below_0.40"]["series_origins"] == 1
+    assert bands["0.40_to_0.50"]["series_origins"] == 1
+    assert bands["above_0.50"]["series_origins"] == 1
+    assert bands["0.40_to_0.50"]["range"] == [0.40, 0.50]
+
+
+def test_empty_band_is_visible_not_omitted(tmp_path):
+    """Eight values all above 0.50 must not look like boundary evidence."""
+    series = tuple((f"s{i}", 0.55 + i * 0.03) for i in range(8))
+    _, _, report = run(tmp_path, build_cache(tmp_path, series=series), omega_doc(series=series))
+    bands = report["omega_band_coverage"]
+    assert report["distinct_omega"] == 8
+    assert bands["above_0.50"]["series_origins"] == 8
+    assert bands["below_0.40"]["series_origins"] == 0
+    assert bands["0.40_to_0.50"]["series_origins"] == 0
+    assert bands["0.40_to_0.50"]["datasets"] == []
+
+
+def test_band_boundaries_are_half_open(tmp_path):
+    series = (("s0", 0.40), ("s1", 0.50), ("s2", 0.30))
+    _, _, report = run(tmp_path, build_cache(tmp_path, series=series), omega_doc(series=series))
+    bands = report["omega_band_coverage"]
+    assert bands["0.40_to_0.50"]["series_origins"] == 1  # 0.40 lands here
+    assert bands["above_0.50"]["series_origins"] == 1    # 0.50 lands here
+    assert bands["below_0.40"]["series_origins"] == 1
+
+
+def test_distinct_datasets_reported_for_boundary_counting(tmp_path):
+    _, _, report = run(tmp_path, build_cache(tmp_path), omega_doc())
+    assert report["distinct_datasets"] == 1  # all three series share one dataset
+    assert report["distinct_omega"] == 3
+
+
+# ---------------- Aadrika's review: naming and repository validation (#45)
+def test_legacy_slash_dataset_rejected_under_v1(tmp_path):
+    """dataset="Salesforce/GiftEval" is a repository, not a production dataset."""
+    def legacy(doc):
+        for row in doc["rows"]:
+            row.update(dataset="Salesforce/GiftEval", config="ett1/H")
+    hashes = build_cache(tmp_path)
+    with pytest.raises(K3InputError, match="legacy slash form"):
+        run(tmp_path, hashes, omega_doc(mutate=legacy))
+
+
+def test_legacy_naming_accepted_when_explicitly_requested(tmp_path):
+    from decision_aware_tsfm.analysis.k3.loader import NAMING_LEGACY
+    import json as _json
+    hashes = build_cache(tmp_path)
+    doc = omega_doc()
+    path = tmp_path / "omega.json"
+    path.write_text(_json.dumps(doc))
+    _, _, report = load_k3_inputs(tmp_path, hashes, path, "current", naming=NAMING_LEGACY)
+    assert report["naming"] == NAMING_LEGACY
+
+
+def test_empty_config_is_valid(tmp_path):
+    """A known source with no frequency variant carries config=""."""
+    series = (("s0", 0.2), ("s1", 0.5), ("s2", 0.8))
+    hashes = {}
+    for sid, _ in series:
+        for model, family, pred in (("classical_m", "classical", 9.0), ("tsfm_m", "tsfm", 10.5)):
+            name = f"{sid}_{model}.parquet"
+            rows = []
+            for step in (1, 2):
+                row = dict(job_id=f"{sid}:{model}", dataset="hospital", config="",
+                           series_id=sid, model=model, family=family, origin=5000,
+                           horizon=2, seed=42, step=step, y_true=10.0,
+                           timestamp=f"2020-01-01T{step:02d}:00:00")
+                row.update({c: pred for c in QCOLS})
+                rows.append(row)
+            table = pa.Table.from_pylist(rows, schema=SCHEMA)
+            table = table.replace_schema_metadata(
+                {b"job": json.dumps({"source_revision": REV, "source_sha256": SHA}).encode()})
+            pq.write_table(table, tmp_path / name)
+            hashes[name] = hashlib.sha256((tmp_path / name).read_bytes()).hexdigest()
+
+    def rename(doc):
+        for row in doc["rows"]:
+            row.update(dataset="hospital", config="")
+    _, _, report = run(tmp_path, hashes, omega_doc(series=series, mutate=rename))
+    assert report["status"] == "ok"
+
+
+def test_source_repository_mismatch_rejected(tmp_path):
+    def repo(doc):
+        doc["source_repository"] = "SomeoneElse/OtherData"
+    hashes = build_cache(tmp_path)
+    for name in list(hashes):
+        table = pq.ParquetFile(tmp_path / name).read()
+        job = json.loads(table.schema.metadata[b"job"])
+        job["source_repository"] = "Salesforce/GiftEval"
+        pq.write_table(table.replace_schema_metadata({b"job": json.dumps(job).encode()}),
+                       tmp_path / name)
+        hashes[name] = hashlib.sha256((tmp_path / name).read_bytes()).hexdigest()
+    with pytest.raises(K3InputError, match="different source repositories"):
+        run(tmp_path, hashes, omega_doc(mutate=repo))
+
+
+def test_source_repository_reported_when_declared(tmp_path):
+    def repo(doc):
+        doc["source_repository"] = "Salesforce/GiftEval"
+    _, _, report = run(tmp_path, build_cache(tmp_path), omega_doc(mutate=repo))
+    assert report["source_repository"] == "Salesforce/GiftEval"
+
+
+def test_blank_repository_rejected(tmp_path):
+    def blank(doc):
+        doc["source_repository"] = "   "
+    with pytest.raises(K3InputError, match="source_repository"):
+        run(tmp_path, build_cache(tmp_path), omega_doc(mutate=blank))
