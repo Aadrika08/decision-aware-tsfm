@@ -17,6 +17,9 @@ Rules taken from docs/runbooks/cache-consumer-contract.md:
   * never attach Omega whose history extends past the forecast origin;
   * match actuals and windows across models before any comparison;
   * one explicit Omega variant per analysis -- variants are never mixed;
+  * an undefined Omega arrives as null with a stated reason, never as 0.0,
+    and is carried through so selectors defer on it (agreed with Veer and
+    Dayson, Slack 2026-10-07);
   * production names follow dataset-config-v1: `dataset` and `config` are
     separate fields and neither carries the legacy slash form, and a source
     repository such as Salesforce/GiftEval is header provenance, never a
@@ -147,7 +150,7 @@ def load_omega(path, allow_fixture=False):
 
     required = {"dataset": str, "config": str, "series_id": str, "source_revision": str,
                 "source_sha256": str, "origin": int, "variant": str,
-                "history_start": int, "history_end": int, "omega": (int, float)}
+                "history_start": int, "history_end": int}
     seen, problems = {}, []
     for i, row in enumerate(rows):
         missing = [f for f, kind in required.items()
@@ -158,8 +161,22 @@ def load_omega(path, allow_fixture=False):
             continue
         if row["variant"] not in variants:
             problems.append(f"row {i}: undeclared variant {row['variant']!r}")
-        if not math.isfinite(row["omega"]):
+
+        # Omega may be undefined (flat or empty history). It then arrives as
+        # null WITH a reason and is carried through, so selectors defer rather
+        # than reading a stand-in number as a real very-low Omega. A bare null,
+        # a reason without a null, or 0.0 offered as "undefined" are refused.
+        value, reason = row.get("omega"), row.get("omega_undefined_reason")
+        if value is None:
+            if not isinstance(reason, str) or not reason.strip():
+                problems.append(f"row {i}: null omega needs a non-empty "
+                                "omega_undefined_reason")
+        elif isinstance(value, bool) or not isinstance(value, (int, float)):
+            problems.append(f"row {i}: omega must be a number or null")
+        elif not math.isfinite(value):
             problems.append(f"row {i}: nonfinite omega")
+        elif reason is not None:
+            problems.append(f"row {i}: omega_undefined_reason set on a defined omega")
         if not _SHA256.match(row["source_sha256"]):
             problems.append(f"row {i}: malformed source_sha256")
         if not 0 <= row["history_start"] < row["history_end"] <= row["origin"]:
@@ -180,6 +197,8 @@ def load_omega(path, allow_fixture=False):
             problems.append(f"{source}: missing {sorted(absent)}")
         if len({(r["source_revision"], r["source_sha256"]) for r in found.values()}) > 1:
             problems.append(f"{source}: variants disagree on source revision/hash")
+        if len({r.get("omega") is None for r in found.values()}) > 1:
+            problems.append(f"{source}: omega undefined in some variants but not others")
         current = found.get("current")
         for name, cap in CAP.items():
             capped = found.get(name)
@@ -237,11 +256,15 @@ def join_omega(table, job_meta, omega, variant, require_provenance=True):
     if wrong_repository:
         _fail("Omega and forecasts name different source repositories", wrong_repository)
 
-    omega_by_key = {k: omega["by_source"][k][variant]["omega"] for k in keys}
+    omega_by_key = {k: omega["by_source"][k][variant].get("omega") for k in keys}
+    undefined = {k: omega["by_source"][k][variant]["omega_undefined_reason"]
+                 for k in keys if omega["by_source"][k][variant].get("omega") is None}
     unused = sorted(set(omega["by_source"]) - keys)
     return omega_by_key, {"provenance_checked_jobs": checked,
                           "unused_omega_sources": len(unused),
-                          "source_repository": omega["source_repository"]}
+                          "source_repository": omega["source_repository"],
+                          "undefined_omega": len(undefined),
+                          "undefined_omega_reasons": sorted(set(undefined.values()))}
 
 
 def validate_naming(pairs, naming, where):
@@ -278,8 +301,9 @@ def validate_naming(pairs, naming, where):
 def omega_band_coverage(omega_by_key):
     """Per band: how many datasets, series-origins and distinct Omega values."""
     coverage = {}
+    defined = {k: v for k, v in omega_by_key.items() if v is not None}
     for label, low, high in OMEGA_BANDS:
-        inside = {k: v for k, v in omega_by_key.items() if low <= v < high}
+        inside = {k: v for k, v in defined.items() if low <= v < high}
         coverage[label] = {
             "range": [None if low == -float("inf") else low,
                       None if high == float("inf") else high],
@@ -287,6 +311,13 @@ def omega_band_coverage(omega_by_key):
             "series_origins": len(inside),
             "distinct_omega": len({round(v, 12) for v in inside.values()}),
         }
+    # Undefined Omega is its own bucket, never folded into a band: these are
+    # the series a scalar Omega rule cannot speak to at all.
+    missing = {k for k, v in omega_by_key.items() if v is None}
+    coverage["undefined"] = {"range": None,
+                             "datasets": sorted({k[0] for k in missing}),
+                             "series_origins": len(missing),
+                             "distinct_omega": 0}
     return coverage
 
 
@@ -343,8 +374,9 @@ def load_k3_inputs(base_dir, partition_hashes, omega_path, variant,
                                            require_provenance=not is_fixture)
     checks = k3_input_checks(table)
 
-    values = np.array(list(omega_by_key.values()), dtype=float)
-    distinct = len(np.unique(values))
+    defined_values = np.array([v for v in omega_by_key.values() if v is not None],
+                              dtype=float)
+    distinct = len(np.unique(defined_values)) if len(defined_values) else 0
     report = {
         "status": "fixture_valid" if is_fixture else "ok",
         "provenance_required": not is_fixture,
@@ -355,8 +387,9 @@ def load_k3_inputs(base_dir, partition_hashes, omega_path, variant,
         **checks,
         **join_report,
         "distinct_omega": distinct,
-        "distinct_datasets": len({k[0] for k in omega_by_key}),
-        "omega_range": [float(values.min()), float(values.max())],
+        "distinct_datasets": len({k[0] for k, v in omega_by_key.items() if v is not None}),
+        "omega_range": ([float(defined_values.min()), float(defined_values.max())]
+                        if len(defined_values) else None),
         "omega_band_coverage": omega_band_coverage(omega_by_key),
     }
     return table, omega_by_key, report
