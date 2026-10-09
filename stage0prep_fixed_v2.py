@@ -341,6 +341,8 @@ def process_all_gift_eval():
                 "subset": subset_name,
                 "dataset": dataset,
                 "config": config,
+                "frequency": raw_freq,
+                "freq_code": freq_code,
                 "item_id": item_id,
                 "item_id_is_fallback": id_is_fallback,
                 "channel": channel_idx,
@@ -350,6 +352,7 @@ def process_all_gift_eval():
                 "split_boundary_index": split_boundary_index,
                 "length": length,
             }
+
 
             if length < 1000:
                 excluded_series.append(

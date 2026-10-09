@@ -60,3 +60,41 @@ def compute_omega(series: np.ndarray, diffs: bool = False) -> float:
     omega = 1.0 - (spectral_entropy / h_max)
 
     return float(np.clip(omega, 0.0, 1.0))
+
+# Reasons a history has no meaningful Omega. Stored alongside a null value
+# rather than a fabricated 0.0: a 0.0 reads as a real "very low Omega" and
+# would push a static rule towards the classical family (agreed with Veer;
+# the Omega comparators defer on null and the count is reported).
+OMEGA_OK = "ok"
+OMEGA_EMPTY = "empty_history"      # fewer than 2 finite observations
+OMEGA_BELOW_FLOOR = "below_floor"  # finite observations below min_finite
+OMEGA_FLAT = "flat_history"        # constant series (or constant differences)
+
+
+def compute_omega_checked(series, diffs: bool = False, min_finite: int = 0):
+    """Same Omega as compute_omega, but returns (value, reason) and never
+    reports a degenerate history as 0.0.
+
+    value is a float in [0, 1] when reason == "ok", otherwise None.
+    min_finite applies the source paper's stability floor (1,000) to the
+    count of finite observations; 0 disables it.
+    """
+    ts = np.asarray(series, dtype=np.float64)
+    ts = ts[np.isfinite(ts)]
+    n_finite = len(ts)
+
+    if n_finite < 2:
+        return None, OMEGA_EMPTY
+    if min_finite and n_finite < min_finite:
+        return None, OMEGA_BELOW_FLOOR
+
+    x = np.diff(ts) if diffs else ts
+    if len(x) < 2:
+        return None, OMEGA_EMPTY
+    if np.ptp(x) == 0:
+        return None, OMEGA_FLAT
+
+    value = compute_omega(ts, diffs=diffs)
+    if not np.isfinite(value):
+        return None, "nonfinite"
+    return value, OMEGA_OK
