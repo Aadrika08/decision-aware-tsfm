@@ -72,7 +72,8 @@ def summarize(res: pd.DataFrame, by=("selector", "horizon", "tau")) -> pd.DataFr
     """Per group: mean scaled regret, and fraction of oracle value recovered
         (sum BF - sum SEL) / (sum BF - sum ORACLE)   on scaled costs, selected units only.
     The fraction is undefined when best-fixed already equals the oracle
-    (a dominance region or an exact tie), and is reported as NaN with a reason."""
+    (a dominance region or an exact tie), or when no unit in the group was
+    selected, and is reported as NaN with the reason."""
     r = res.copy()
     s = r.status == "selected"
     r["sel_s"] = np.where(s, r.realized_cost / r.scale, np.nan)
@@ -86,5 +87,6 @@ def summarize(res: pd.DataFrame, by=("selector", "horizon", "tau")) -> pd.DataFr
     denom = out.bf - out.orc
     ok = denom > 1e-12 * np.maximum(1.0, out.bf.abs())
     out["frac_oracle_value"] = np.where(ok, (out.bf - out.sel) / denom.where(ok, 1.0), np.nan)
-    out["frac_note"] = np.where(ok, "", "undefined: best-fixed equals oracle")
+    out["frac_note"] = np.where(ok, "", np.where(out.n_selected > 0, "undefined: best-fixed equals oracle",
+                                                 "undefined: no selected units"))
     return out.drop(columns=["sel", "orc", "bf"])
