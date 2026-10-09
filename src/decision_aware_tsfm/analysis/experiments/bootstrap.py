@@ -91,7 +91,7 @@ import numpy as np
 import pandas as pd
 
 from ..decision.schema import UNIT_KEYS
-from ..decision.selectors import argmin_family
+from ..decision.selectors import exact_argmin_family
 
 SERIES_ID_KEYS = ["dataset", "config", "series_id"]
 PANEL_KEYS = SERIES_ID_KEYS + ["horizon"]
@@ -584,16 +584,19 @@ def attach_sample_oracle(cost: pd.DataFrame) -> pd.DataFrame:
     """Add oracle_family and pinball_oracle to a cost table.
 
     oracle_family is the family with the lower mean cost for the unit
-    (dataset, config, series_id, horizon, tau) ON THE ROWS GIVEN, with the
-    engine's tie rule (ties go to classical). It is computed once, here, and
-    then stays attached to every origin of the unit, so resampling cannot
-    change it. For tables that did not come from fixed_choice_costs.
+    (dataset, config, series_id, horizon, tau) ON THE ROWS GIVEN, named the
+    way the engine names its hindsight oracle (exact_argmin_family: no
+    tolerance, only an exact tie goes to classical), so the unit's mean
+    pinball_oracle is exactly the lower of its two mean costs. It is computed
+    once, here, and then stays attached to every origin of the unit, so
+    resampling cannot change it. For tables that did not come from
+    fixed_choice_costs.
     """
     c = cost.copy()
     if c[COST_COLUMNS].isna().any().any():
         raise ValueError("cost table has missing values")
     g = c.groupby(UNIT_KEYS, sort=False)[COST_COLUMNS].transform("sum")
-    c["oracle_family"] = argmin_family(g["pinball_classical"] / g["n"], g["pinball_tsfm"] / g["n"])
+    c["oracle_family"] = exact_argmin_family(g["pinball_classical"] / g["n"], g["pinball_tsfm"] / g["n"])
     c["pinball_oracle"] = _pick(c["oracle_family"], c)
     return c
 

@@ -13,6 +13,7 @@ hashes they had at the start.
 
 M1 to M16 are the independent reviewer's sixteen bugs, re-expressed against the
 current code (same defect, current line). N1 to N9 were added with the fixes.
+T1 to T3 were added when attach_sample_oracle moved to the engine's exact rule.
 A bug counts as caught when the suite exits non-zero; the failing tests are
 listed. "SURVIVED" means the suite passed with the bug in place.
 """
@@ -101,6 +102,15 @@ BUGS = [
      'test = tables["test"]'),
     ("N9", "allow_held_out accepts any truthy value", "e2.py",
      "    if not isinstance(allow_held_out, bool):", "    if False:"),
+    ("T1", "attach_sample_oracle is back on the tolerance rule (argmin_family)", "bootstrap.py",
+     "from ..decision.selectors import exact_argmin_family",
+     "from ..decision.selectors import argmin_family as exact_argmin_family"),
+    ("T2", "attach_sample_oracle: exact rule reversed, the dearer family is named", "bootstrap.py",
+     'exact_argmin_family(g["pinball_classical"] / g["n"], g["pinball_tsfm"] / g["n"])',
+     'exact_argmin_family(g["pinball_tsfm"] / g["n"], g["pinball_classical"] / g["n"])'),
+    ("T3", "attach_sample_oracle gives an exact tie to tsfm", "bootstrap.py",
+     'exact_argmin_family(g["pinball_classical"] / g["n"], g["pinball_tsfm"] / g["n"])',
+     'np.where(g["pinball_tsfm"] / g["n"] <= g["pinball_classical"] / g["n"], "tsfm", "classical")'),
 ]
 
 
