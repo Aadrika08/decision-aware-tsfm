@@ -23,12 +23,27 @@ TIE_RTOL = 1e-12
 
 
 def argmin_family(cost_classical, cost_tsfm) -> np.ndarray:
-    """Lower-cost family per unit. Exact ties (within 1e-12 relative) go to
-    classical, the cheaper family to run. NaN in either cost gives None."""
+    """Lower-cost family per unit, for choices made from validation costs. Ties
+    (within 1e-12 relative) go to classical, the cheaper family to run. NaN in
+    either cost gives None. Hindsight columns use exact_argmin_family instead."""
     a = np.asarray(cost_classical, dtype=float)
     b = np.asarray(cost_tsfm, dtype=float)
     tol = TIE_RTOL * np.maximum(1.0, np.maximum(np.abs(a), np.abs(b)))
     out = np.where(b < a - tol, FAMILIES[1], FAMILIES[0]).astype(object)
+    out[~(np.isfinite(a) & np.isfinite(b))] = None
+    return out
+
+
+def exact_argmin_family(cost_classical, cost_tsfm) -> np.ndarray:
+    """The family whose cost is the exact minimum, with no tolerance. Only an
+    exact tie goes to classical. NaN in either cost gives None.
+
+    Used wherever a family is named in hindsight (the oracle, oracle_family,
+    best_fixed_family), so the family named always carries the minimum cost that
+    regret is measured against, and the oracle's regret is exactly zero."""
+    a = np.asarray(cost_classical, dtype=float)
+    b = np.asarray(cost_tsfm, dtype=float)
+    out = np.where(b < a, FAMILIES[1], FAMILIES[0]).astype(object)
     out[~(np.isfinite(a) & np.isfinite(b))] = None
     return out
 
@@ -109,7 +124,7 @@ class HindsightOracle:
         if inp.test is None:
             raise ValueError("oracle needs test costs")
         t = inp.units[UNIT_KEYS].merge(inp.test, on=UNIT_KEYS, how="left")
-        return _decisions(inp.units, argmin_family(t["J_classical"], t["J_tsfm"]))
+        return _decisions(inp.units, exact_argmin_family(t["J_classical"], t["J_tsfm"]))
 
 
 @dataclass(frozen=True)
@@ -124,6 +139,9 @@ class NotFitted:
         fam = np.full(len(inp.units), None, dtype=object)
         return _decisions(inp.units, fam, f"not fitted: {self.reason}")
 
+    def describe(self) -> dict:
+        return dict(not_fitted=self.reason)
+
 
 DEFAULT_BETA_GRID = (-0.5, -0.25, -0.1, 0.0, 0.1, 0.25, 0.5)
 
@@ -132,7 +150,8 @@ DEFAULT_BETA_GRID = (-0.5, -0.25, -0.1, 0.0, 0.1, 0.25, 0.5)
 class DOmegaLinear:
     """PLACEHOLDER for D_Omega: the proposal's minimal boundary
         TSFM iff omega > omega0 + beta * |tau - 0.5|
-    fitted by minimising total scaled regret on fit-only datasets.
+    fitted by minimising total scaled regret on the units it is given (one
+    leave-one-dataset-out fold, or the fit-only datasets under the older scheme).
 
     Abdullah owns the frozen Omega-plus-tau selector (K3/E4). This class exists
     so the comparator slot runs end to end; his selector should replace it by
@@ -181,3 +200,74 @@ class DOmegaLinear:
         fam = np.where(om > bound, "tsfm", "classical").astype(object)
         fam[~np.isfinite(om)] = None
         return _decisions(inp.units, fam, f"omega0={self.omega0:.4f} beta={self.beta:+.3f}")
+
+    def describe(self) -> dict:
+        return dict(omega0=self.omega0, beta=self.beta, fitted_datasets=list(self.fitted_datasets))
+
+
+FIT_POOL_COLUMNS = UNIT_KEYS + ["omega", "J_classical", "J_tsfm", "scale"]
+
+
+@dataclass(frozen=True)
+class LeaveOneDatasetOut:
+    """Fit a selector once per evaluation dataset, never on that dataset.
+
+    For evaluation dataset d the selector is fitted on every unit in the pool
+    whose dataset is not d, and applied only to d's units. The pool holds the
+    fit-only datasets (all origins) and the other evaluation datasets' test
+    units, so d itself is never seen while its rule is fitted. A fold whose
+    pool covers fewer than min_fit_datasets distinct datasets is not fitted,
+    and its units are reported as insufficient_data with the reason.
+
+    fit: callable(fit_units) -> selector with select(inp), e.g. DOmegaLinear.fit.
+    """
+    folds: dict
+    min_fit_datasets: int
+    name: str = "d_omega"
+    needs_hindsight: bool = False
+
+    @classmethod
+    def build(cls, pool: pd.DataFrame, eval_datasets, fit=None, min_fit_datasets: int = 2,
+              name: str = "d_omega") -> "LeaveOneDatasetOut":
+        fit = DOmegaLinear.fit if fit is None else fit
+        if min_fit_datasets < 1:
+            raise ValueError("min_fit_datasets must be at least 1")
+        missing = [c for c in FIT_POOL_COLUMNS if c not in pool.columns]
+        if missing:
+            raise ValueError(f"fit pool lacks columns {missing}")
+        usable = pool.dropna(subset=["omega", "J_classical", "J_tsfm", "scale"])
+        folds = {}
+        for d in sorted(set(eval_datasets)):
+            fold = usable[usable["dataset"] != d]
+            n = int(fold["dataset"].nunique())
+            if n < min_fit_datasets:
+                folds[d] = NotFitted(name, f"leave-one-dataset-out: {n} other dataset(s) with usable "
+                                           f"units, need {min_fit_datasets}")
+            else:
+                folds[d] = fit(fold)
+        return cls(folds=folds, min_fit_datasets=int(min_fit_datasets), name=name)
+
+    @property
+    def fitted_series(self) -> frozenset:
+        return frozenset().union(*[getattr(f, "fitted_series", frozenset()) for f in self.folds.values()])
+
+    def select(self, inp):
+        parts = []
+        for d, units in inp.units.groupby("dataset", sort=True):
+            fold = self.folds.get(d, NotFitted(self.name, f"leave-one-dataset-out: no fold for {d!r}"))
+            if d in getattr(fold, "fitted_datasets", ()):
+                raise FitEvalOverlapError(f"dataset {d!r} was used to fit its own rule")
+            out = fold.select(SelectorInput(units=units, val=inp.val, test=None))
+            out["note"] = f"fold={d} " + out["note"].astype(str)
+            parts.append(out)
+        if not parts:
+            return _decisions(inp.units, np.full(0, None, dtype=object))
+        res = pd.concat(parts, ignore_index=True)
+        # same row order as the units handed in
+        order = inp.units[UNIT_KEYS].reset_index(drop=True).reset_index().rename(columns={"index": "_row"})
+        return (res.merge(order, on=UNIT_KEYS, how="left", validate="1:1")
+                .sort_values("_row").drop(columns="_row").reset_index(drop=True))
+
+    def describe(self) -> dict:
+        return dict(scheme="leave_one_dataset_out", min_fit_datasets=self.min_fit_datasets,
+                    folds={d: f.describe() for d, f in sorted(self.folds.items())})

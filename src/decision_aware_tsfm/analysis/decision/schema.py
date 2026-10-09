@@ -86,4 +86,6 @@ def validate_selection_frame(df: pd.DataFrame) -> pd.DataFrame:
     orc = sel & (df["selector"] == "hindsight_oracle")
     if (df.loc[orc, "regret"] != 0).any():
         raise SchemaError("oracle has non-zero regret against itself")
+    if (df.loc[orc, "chosen_family"] != df.loc[orc, "oracle_family"]).any():
+        raise SchemaError("oracle chose a family other than oracle_family")
     return df
