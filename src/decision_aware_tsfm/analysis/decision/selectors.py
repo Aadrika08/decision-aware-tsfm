@@ -23,12 +23,27 @@ TIE_RTOL = 1e-12
 
 
 def argmin_family(cost_classical, cost_tsfm) -> np.ndarray:
-    """Lower-cost family per unit. Exact ties (within 1e-12 relative) go to
-    classical, the cheaper family to run. NaN in either cost gives None."""
+    """Lower-cost family per unit, for choices made from validation costs. Ties
+    (within 1e-12 relative) go to classical, the cheaper family to run. NaN in
+    either cost gives None. Hindsight columns use exact_argmin_family instead."""
     a = np.asarray(cost_classical, dtype=float)
     b = np.asarray(cost_tsfm, dtype=float)
     tol = TIE_RTOL * np.maximum(1.0, np.maximum(np.abs(a), np.abs(b)))
     out = np.where(b < a - tol, FAMILIES[1], FAMILIES[0]).astype(object)
+    out[~(np.isfinite(a) & np.isfinite(b))] = None
+    return out
+
+
+def exact_argmin_family(cost_classical, cost_tsfm) -> np.ndarray:
+    """The family whose cost is the exact minimum, with no tolerance. Only an
+    exact tie goes to classical. NaN in either cost gives None.
+
+    Used wherever a family is named in hindsight (the oracle, oracle_family,
+    best_fixed_family), so the family named always carries the minimum cost that
+    regret is measured against, and the oracle's regret is exactly zero."""
+    a = np.asarray(cost_classical, dtype=float)
+    b = np.asarray(cost_tsfm, dtype=float)
+    out = np.where(b < a, FAMILIES[1], FAMILIES[0]).astype(object)
     out[~(np.isfinite(a) & np.isfinite(b))] = None
     return out
 
@@ -109,7 +124,7 @@ class HindsightOracle:
         if inp.test is None:
             raise ValueError("oracle needs test costs")
         t = inp.units[UNIT_KEYS].merge(inp.test, on=UNIT_KEYS, how="left")
-        return _decisions(inp.units, argmin_family(t["J_classical"], t["J_tsfm"]))
+        return _decisions(inp.units, exact_argmin_family(t["J_classical"], t["J_tsfm"]))
 
 
 @dataclass(frozen=True)
