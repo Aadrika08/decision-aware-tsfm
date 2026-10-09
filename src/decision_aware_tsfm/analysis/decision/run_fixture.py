@@ -30,7 +30,9 @@ def main():
     tables = build_tables(out / "fixture_cache.parquet", FIXTURE_SCHEMA, REPRESENTATIVES,
                           FAMILY_OF_MODEL, omega, fit_only_datasets=FIT_ONLY_DATASETS)
     res, d = run(tables, REPRESENTATIVES, FIXTURE_STATIC_THRESHOLD)
-    print(f"D_Omega placeholder fitted on {d.fitted_datasets}: omega0={d.omega0:.4f}, beta={d.beta:+.3f}")
+    print("D_Omega placeholder, leave-one-dataset-out folds:")
+    for ds, fold in d.describe()["folds"].items():
+        print(f"  {ds}: {fold}")
     print(f"evaluation units per selector: {len(tables['units'])}; result rows: {len(res)}; "
           f"schema validated")
     res.to_parquet(out / "selection_results.parquet", index=False)

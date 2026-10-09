@@ -21,7 +21,7 @@ import pandas as pd
 from .cache_io import qcol
 from .handoff import read_handoff
 from .metrics import TAU_GRID
-from .pipeline import build_tables, run
+from .pipeline import FIT_SCHEMES, build_tables, run
 
 
 def direct_test_costs(forecasts: pd.DataFrame, per_origin: pd.DataFrame,
@@ -52,6 +52,7 @@ def main(argv=None):
                     help="static Omega threshold (no default: must be the recorded value)")
     ap.add_argument("--fit-only-datasets", nargs="*", default=[])
     ap.add_argument("--val-fraction", type=float, default=1 / 3)
+    ap.add_argument("--fit-scheme", choices=FIT_SCHEMES, default="leave_one_dataset_out")
     ap.add_argument("--out", type=Path, required=True)
     a = ap.parse_args(argv)
     if a.out.exists():
@@ -62,8 +63,11 @@ def main(argv=None):
     family_of_model = forecasts.groupby("model")["family"].first().to_dict()
     tables = build_tables(forecasts, "producer-v1", reps, family_of_model, omega,
                           fit_only_datasets=tuple(a.fit_only_datasets), val_fraction=a.val_fraction,
-                          omega_col="omega", omega_variant=a.variant)
-    res, d_omega = run(tables, reps, a.static_threshold)
+                          omega_col="omega", omega_variant=a.variant,
+                          # interface check: a bundle may have too few origins per series for a
+                          # validation third; keep those series so every column is still checked
+                          exclude_without_validation=False)
+    res, d_omega = run(tables, reps, a.static_threshold, fit_scheme=a.fit_scheme)
 
     direct = direct_test_costs(forecasts, tables["per_origin"], reps)
     cmp = tables["test"].merge(direct, on=["dataset", "config", "series_id", "horizon", "tau"],
@@ -78,8 +82,8 @@ def main(argv=None):
     report.update(
         schema="producer-v1", representatives=reps, static_threshold=a.static_threshold,
         fit_only_datasets=list(a.fit_only_datasets), val_fraction=a.val_fraction,
-        d_omega=(dict(omega0=d_omega.omega0, beta=d_omega.beta, fitted_datasets=list(d_omega.fitted_datasets))
-                 if hasattr(d_omega, "omega0") else dict(not_fitted=d_omega.reason)),
+        fit_scheme=a.fit_scheme, d_omega=d_omega.describe(),
+        series_without_validation_kept="interface check only; an analysis run excludes them",
         evaluation_units=int(len(tables["units"])), result_rows=int(len(res)),
         status_counts={f"{s}/{st}": int(n) for (s, st), n in res.groupby(["selector", "status"]).size().items()},
         column_check=dict(units_compared=int((cmp["_merge"] == "both").sum()), unmatched=unmatched,

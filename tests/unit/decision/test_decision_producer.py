@@ -389,10 +389,22 @@ class HandoffBundle(unittest.TestCase):
         rep = json.loads((out / "report.json").read_text(encoding="utf-8"))
         self.assertEqual(rep["column_check"]["unmatched"], 0)
         self.assertLess(rep["column_check"]["max_relative_difference"], 1e-10)
-        self.assertEqual(rep["d_omega"], {"not_fitted": "no fit-only datasets supplied"})
+        # one dataset in the bundle: its leave-one-dataset-out fold has nothing to fit on
+        self.assertEqual(rep["fit_scheme"], "leave_one_dataset_out")
+        self.assertEqual(set(rep["d_omega"]["folds"]), {"fx_flat"})
+        self.assertIn("0 other dataset", rep["d_omega"]["folds"]["fx_flat"]["not_fitted"])
         res = pd.read_parquet(out / "selection_results.parquet")
         self.assertTrue((res[res.selector == "d_omega"].status == "insufficient_data").all())
         self.assertTrue((res[res.selector == "always_tsfm"].status == "selected").all())
+
+    def test_check_command_old_fit_scheme(self):
+        write_bundle(self.root, self.frame)
+        out = Path(self.tmp.name) / "out_old"
+        quiet_check([str(self.root), "--variant", "current", "--classical", "flat-classical",
+                     "--tsfm", "flat-tsfm", "--static-threshold", "0.45", "--val-fraction", "0",
+                     "--fit-scheme", "fit_only_datasets", "--out", str(out)])
+        rep = json.loads((out / "report.json").read_text(encoding="utf-8"))
+        self.assertEqual(rep["d_omega"], {"not_fitted": "no fit-only datasets supplied"})
 
 
 @unittest.skipUnless(os.environ.get("DECISION_HANDOFF_BUNDLE"),

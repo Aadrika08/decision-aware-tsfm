@@ -11,7 +11,7 @@ from decision_aware_tsfm.analysis.decision.fixture import (
     FIXTURE_STATIC_THRESHOLD as THRESHOLD, REPRESENTATIVES)
 from decision_aware_tsfm.analysis.decision.guards import FitEvalOverlapError, HeldOutLeakError
 from decision_aware_tsfm.analysis.decision.metrics import TAU_GRID
-from decision_aware_tsfm.analysis.decision.pipeline import seven_selectors
+from decision_aware_tsfm.analysis.decision.pipeline import run, seven_selectors
 from decision_aware_tsfm.analysis.decision.selectors import DOmegaLinear, SelectorInput
 
 from . import _shared
@@ -127,9 +127,11 @@ class SevenComparators(unittest.TestCase):
                 s.select(inp)
 
     def test_d_omega_recovers_planted_boundary(self):
-        self.assertAlmostEqual(self.d_omega.omega0, 0.45, places=12)
-        self.assertEqual(self.d_omega.beta, 0.0)
-        self.assertEqual(self.d_omega.fitted_datasets, ("fx_dfit",))
+        # fitted on the fit-only dataset alone, where the boundary is planted at 0.45
+        _, d = run(self.tables, REPRESENTATIVES, THRESHOLD, fit_scheme="fit_only_datasets")
+        self.assertAlmostEqual(d.omega0, 0.45, places=12)
+        self.assertEqual(d.beta, 0.0)
+        self.assertEqual(d.fitted_datasets, ("fx_dfit",))
 
     def test_d_omega_refuses_held_out(self):
         fu = self.tables["fit_units"].copy()
