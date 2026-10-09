@@ -731,8 +731,17 @@ class EvaluateAndMetrics(_WithFrozen):
         self.assertEqual(e2.load_frozen(self.path).payload, self.before_payload)
 
     def test_same_selection_as_the_engine_pipeline(self):
-        eng, _ = _shared.results()
+        # E2 freezes one rule fitted on the fit-only datasets, so compare with the
+        # engine run under that same scheme (the engine default is leave-one-dataset-out)
+        eng, _ = _shared.results(fit_scheme="fit_only_datasets")
         pd.testing.assert_frame_equal(self.r.selection, eng)
+
+    def test_engine_default_differs_from_e2_only_in_d_omega(self):
+        lodo, _ = _shared.results()
+        e2sel = self.r.selection
+        keep = lodo.selector != "d_omega"
+        pd.testing.assert_frame_equal(lodo[keep].reset_index(drop=True),
+                                      e2sel[e2sel.selector != "d_omega"].reset_index(drop=True))
 
     def test_on_the_fixture_the_placeholder_equals_the_static_rule(self):
         """beta is 0 and omega0 equals the fixture's static threshold, so the two

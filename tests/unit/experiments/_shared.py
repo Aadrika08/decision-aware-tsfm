@@ -54,8 +54,8 @@ def cli_patches():
 
 
 @lru_cache(maxsize=None)
-def results():
-    return run(tables(), REPRESENTATIVES, FIXTURE_STATIC_THRESHOLD)
+def results(fit_scheme="leave_one_dataset_out"):
+    return run(tables(), REPRESENTATIVES, FIXTURE_STATIC_THRESHOLD, fit_scheme=fit_scheme)
 
 
 def subset(tbl, datasets):
