@@ -8,8 +8,7 @@ import numpy as np
 import pyarrow.feather as feather
 import pyarrow.ipc as ipc
 from datasets import load_from_disk
-from omega import compute_omega
-
+from omega import compute_omega_checked
 
 DATA_DIR = "./gift_eval_data"
 
@@ -46,6 +45,11 @@ MAX_WINDOW = 20
 M4_PRED_LENGTH_MAP = {"A": 6, "Q": 8, "M": 18, "W": 13, "D": 14, "H": 48}
 PRED_LENGTH_MAP = {"M": 12, "W": 8, "D": 30, "H": 48, "T": 48, "S": 60}
 TERM_MULTIPLIERS = {"short": 1, "medium": 10, "long": 15}
+
+
+def r(v):
+    """Round an Omega value to 4 places; None (undefined Omega) passes through."""
+    return None if v is None else round(v, 4)
 
 
 def maybe_reconvert_freq(freq: str) -> str:
@@ -360,8 +364,8 @@ def process_all_gift_eval():
                 )
                 continue
 
-            omega_lev = compute_omega(ts, diffs=False)
-            omega_dif = compute_omega(ts, diffs=True)
+            omega_lev, omega_lev_status = compute_omega_checked(ts, diffs=False)
+            omega_dif, omega_dif_status = compute_omega_checked(ts, diffs=True)
 
             # 4,096-step column: sliced from the same RAW trimmed array
             # (before NaN-stripping), same ordering as the main trim fix --
@@ -382,20 +386,23 @@ def process_all_gift_eval():
                 history_start_index_4096 = 0
             ts_4096 = ts_4096_raw[np.isfinite(ts_4096_raw)]
 
-            omega_lev_4096 = compute_omega(ts_4096, diffs=False)
-            omega_dif_4096 = compute_omega(ts_4096, diffs=True)
+            omega_lev_4096, omega_lev_4096_status = compute_omega_checked(ts_4096, diffs=False, min_finite=1000)
+            omega_dif_4096, omega_dif_4096_status = compute_omega_checked(ts_4096, diffs=True, min_finite=1000)
 
             dev_manifest.append(
                 {**base_entry, "horizons": HORIZONS, "status": "active_dev"}
             )
-
             omega_values.append(
                 {
                     "series_id": series_id,
-                    "omega_levels": round(omega_lev, 4),
-                    "omega_diffs": round(omega_dif, 4),
-                    "omega_levels_4096": round(omega_lev_4096, 4),
-                    "omega_diffs_4096": round(omega_dif_4096, 4),
+                    "omega_levels": r(omega_lev),
+                    "omega_levels_status": omega_lev_status,
+                    "omega_diffs": r(omega_dif),
+                    "omega_diffs_status": omega_dif_status,
+                    "omega_levels_4096": r(omega_lev_4096),
+                    "omega_levels_4096_status": omega_lev_4096_status,
+                    "omega_diffs_4096": r(omega_dif_4096),
+                    "omega_diffs_4096_status": omega_dif_4096_status,
                     "history_length_4096": len(ts_4096),
                     "history_start_index_4096": history_start_index_4096,
                 }
