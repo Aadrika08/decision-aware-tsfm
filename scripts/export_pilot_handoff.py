@@ -26,7 +26,14 @@ import numpy as np
 import pandas as pd
 from datasets import load_from_disk
 
-from omega import compute_omega_checked
+try:
+       from omega import compute_omega_checked  # stage0 folder
+except ImportError:  # repo layout after main's restructure
+       import sys
+       sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+       from decision_aware_tsfm.omega.compute import compute_omega_checked
+
+
 from stage0prep_fixed_v2 import (
     PRED_LENGTH_MAP,
     base_freq_code,

@@ -8,7 +8,13 @@ import numpy as np
 import pyarrow.feather as feather
 import pyarrow.ipc as ipc
 from datasets import load_from_disk
-from omega import compute_omega_checked
+try:
+    from omega import compute_omega_checked  # stage0 folder
+except ImportError:  # repo layout after main's restructure
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+    from decision_aware_tsfm.omega.compute import compute_omega_checked
 
 DATA_DIR = "./gift_eval_data"
 
