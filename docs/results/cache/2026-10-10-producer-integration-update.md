@@ -19,6 +19,11 @@ remain intact. No forecasting models ran and M5/PJM were not accessed.
 - A first discovery run without those evidence inputs passed with six skips;
   the supplied-input run above covers those checks. Neither run certifies a
   real-model runtime or measured throughput.
+- Initial PR CI passed Linux but failed the new acceptance test on Windows:
+  it regenerated NPY files while readiness retained memory maps. The test now
+  keeps its staged arrays immutable and changes only Omega metadata between
+  cases, matching the real handoff contract. No executor behavior was changed;
+  the corrected pushed-head CI must pass before this PR is considered green.
 
 Reproduce from this PR checkout in the pinned environment, after downloading
 `v0.1.0-smoke/forecast-smoke-sample.zip` into `cache/` and creating a clean

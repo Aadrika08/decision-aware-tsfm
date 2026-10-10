@@ -77,7 +77,6 @@ class PilotReadinessTest(unittest.TestCase):
     def test_reasoned_null_omega_keeps_forecast_windows_and_job_ids(self):
         _, original, original_first = self.inspect()
         for reason in ("empty_history", "below_floor", "flat_history", "nonfinite"):
-            self.workload, self.models, self.omega = handoff(self.root)
             for row in self.omega["rows"]:
                 if row["series_id"] == "stable-0" and row["origin"] == 4096:
                     row.update(omega=None, omega_status=reason)
