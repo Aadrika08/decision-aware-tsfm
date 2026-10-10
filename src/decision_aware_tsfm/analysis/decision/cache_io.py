@@ -24,8 +24,9 @@ Supported schemas
                   job_id, dataset, config, series_id, model, family (str);
                   origin, horizon, seed, step (int64); y_true (float64);
                   timestamp (ISO 8601 str); q_0.01 ... q_0.99 (float64).
-                  (job_id, step) unique, no nulls or non-finite values,
-                  quantiles non-decreasing, family in {classical, tsfm}.
+                  (job_id, step) unique, every job holds exactly steps 1..horizon,
+                  no nulls or non-finite values, quantiles non-decreasing,
+                  family in {classical, tsfm}.
 """
 from __future__ import annotations
 
@@ -123,6 +124,14 @@ def _from_producer_v1(raw: pd.DataFrame, taus=TAU_GRID) -> pd.DataFrame:
     if (per_job > 1).any(axis=None):
         bad = per_job[(per_job > 1).any(axis=1)].index[:3].tolist()
         raise CacheError(f"jobs whose rows disagree on dataset/config/series/model/seed/horizon/origin: {bad}")
+    # every job must hold exactly steps 1..horizon. Coverage of targets is checked later across
+    # seeds, where a second seed would hide a step that one job lacks
+    steps = df.groupby("job_id").agg(rows=("step", "size"), first_step=("step", "min"),
+                                     last_step=("step", "max"), horizon=("horizon", "first"))
+    partial = (steps.rows != steps.horizon) | (steps.first_step != 1) | (steps.last_step != steps.horizon)
+    if partial.any():
+        raise CacheError(f"{int(partial.sum())} jobs do not hold exactly steps 1..horizon, e.g. "
+                         f"{steps[partial].head(3).reset_index().to_dict('records')}")
     fam_per_model = df.groupby("model")["family"].nunique()
     if (fam_per_model > 1).any():
         raise CacheError(f"models labelled with more than one family: {fam_per_model[fam_per_model > 1].index.tolist()}")

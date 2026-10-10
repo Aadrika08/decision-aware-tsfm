@@ -1,5 +1,10 @@
 # Cache handoff for Veer — issue #3
 
+For the proposed production dataset/config naming, exact timestamp examples and
+the shared distinct-quantile fixture, see the
+[production handoff](production-cache-handoff.md) and issue #45. The historical
+column meanings and evidence below remain unchanged.
+
 This documents the actual published v1 smoke cache. It is usable now for decision
 engine fixtures; it does not freeze the production workload, stable-ID algorithm,
 model roster, or new forecasting methods. Follow-up under parent #3: make the
@@ -39,6 +44,11 @@ The payload validator checks shape/types/values/completeness only. Use the
 existing release verifier for real v1 provenance and identity verification.
 
 ## Model evidence as of 2026-09-19
+
+This table describes the historical handoff. The later
+[2026-09-21 synthetic qualification](../results/cache/2026-09-21-pilot-adapter-qualification.md)
+passed all four approved pilot adapters at horizons 1/24/168; use the
+[development pilot runbook](development-pilot.md) for the current integration steps.
 
 | Model | Evidence available | Limits / action needed |
 |---|---|---|

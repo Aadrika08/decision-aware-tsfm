@@ -1,0 +1,215 @@
+{
+  "status": "preparation_verified_real_pilot_blocked",
+  "code_commit": "14d98904e120356e0f87e225ce35606b44a0f199",
+  "issues": {
+    "readiness": 28,
+    "real_pilot_acceptance": 29,
+    "resource_budget": 30,
+    "pull_request": 31
+  },
+  "readiness_fixture": {
+    "status": "fixture_valid",
+    "fixture": true,
+    "planned_jobs": 96,
+    "planned_rows": 6176,
+    "series": 2,
+    "origins": 4,
+    "first_jobs": 24,
+    "first_rows": 1544,
+    "source_windows_verified": 12,
+    "checker_sha256": "aadd16ecc02d559334ca9974ff3c93abf2cf26fb3cfaa42f5fc0e3b81d7acb92",
+    "provenance": {
+      "environment": {
+        "python": "3.11.15",
+        "numpy": "1.26.4",
+        "scipy": "1.11.4",
+        "pandas": "2.2.3",
+        "pyarrow": "16.1.0",
+        "torch": "2.4.1",
+        "uni2ts": "2.0.0",
+        "statsforecast": "2.1.1",
+        "statsmodels": "0.15.0",
+        "coreforecast": "0.0.18",
+        "utilsforecast": "0.2.16",
+        "threadpoolctl": "3.7.0"
+      },
+      "git_commit": "14d98904e120356e0f87e225ce35606b44a0f199",
+      "implementation_sha256": "a38b4901cdc99210f953c19f2be38c071846ca517dd6f5f627f8e15e3516e178",
+      "environment_sha256": "86d8741605a3e5f29262eb6bdbadae072285a5935f0255c685c659a9d546f8fe"
+    }
+  },
+  "measurement_fixture": {
+    "scope": "Existing two-constant-model invented fixture; no actual forecasting model inference",
+    "status": "complete",
+    "evidence_kind": "fixture",
+    "generation_exit_code": 0,
+    "measurement_status": "complete",
+    "maximum_process_rss_kib": 124544,
+    "gpu_device_samples": {
+      "GPU-40598445-1159-3d79-c19d-7572ffbd1227": {
+        "sample_count": 2,
+        "max_used_mib": 4.0,
+        "max_utilization_percent": 0,
+        "total_mib": 6141.0,
+        "first_sample": "2026/09/21 07:54:44.877",
+        "last_sample": "2026/09/21 07:54:45.884"
+      }
+    },
+    "hardware": {
+      "platform": "Linux-7.1.9-arch1-2-x86_64-with-glibc2.44",
+      "logical_cpus": 16,
+      "cpu_models": [
+        "AMD Ryzen 7 7735HS with Radeon Graphics"
+      ],
+      "gpu_probe": {
+        "command": [
+          "/usr/bin/nvidia-smi",
+          "--query-gpu=uuid,name,driver_version,memory.total",
+          "--format=csv,noheader,nounits"
+        ],
+        "exit_code": 0,
+        "stdout": "GPU-40598445-1159-3d79-c19d-7572ffbd1227, NVIDIA GeForce RTX 4050 Laptop GPU, 610.57.04, 6141\n",
+        "stderr": ""
+      }
+    },
+    "environment": {
+      "OPENBLAS_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "LC_ALL": "C",
+      "PYTHONPATH": "/tmp/decision-aware-tsfm-28/src",
+      "PYTHONDONTWRITEBYTECODE": "1"
+    },
+    "wrapper_sha256": "674ddb25878bd1dd48add4b388af2fc646037b6e48a5e00b0e2a46426ccaf308",
+    "wall_seconds": 2.158040123002138,
+    "errors": [],
+    "generation": {
+      "status": "complete",
+      "generated": 24,
+      "skipped": 0,
+      "failed": 0,
+      "wall_seconds": 0.69273306899413
+    },
+    "rerun": {
+      "status": "complete",
+      "generated": 0,
+      "skipped": 24,
+      "failed": 0,
+      "wall_seconds": 0.45123007700021844
+    }
+  },
+  "integrity": {
+    "rerun_generated": 0,
+    "rerun_skipped": 24,
+    "repaired_jobs": 2,
+    "verified_jobs": 24,
+    "repaired_payloads_match": true,
+    "quarantined_files": [
+      "quarantine/7c76ec37e94949e3a0b0db5dc8ac9ffb-20b4ed313338076ab4e38250e80b4aa27f9a5a8726ea033fc39eb8c87af964a6.parquet"
+    ],
+    "original_cache_unchanged": true,
+    "audit_semantics": "missing means no verified partition; includes the corrupted file"
+  },
+  "tests": {
+    "command": [
+      "/home/utkarsh/Work/shraddha/decision-aware-tsfm/cache/qualification-20/.venv/bin/python",
+      "-m",
+      "unittest",
+      "discover",
+      "-v"
+    ],
+    "exit_code": 0,
+    "wall_seconds": 19.107162341009825,
+    "count": 88,
+    "skips": 0
+  },
+  "upstream_handoff": {
+    "checked_at": "2026-09-21T02:20:32.453576+00:00",
+    "status": "blocked",
+    "evidence_kind": "upstream_handoff_inventory",
+    "source": "origin/feat/1-omega-validation:dev_manifest.json",
+    "upstream_commit": "b05b844ae9cff0dbcd27e8b043f775143f047723",
+    "sha256": "a944b4a9b02ae2bc72e4ff6cd4fbe869a778d2ad3a2bc80498574919f7d35b4b",
+    "active_rows": 8782,
+    "counter_ids": 8782,
+    "active_row_fields": [
+      "channel",
+      "horizons",
+      "length",
+      "omega_diffs",
+      "omega_levels",
+      "series_id",
+      "status",
+      "subset"
+    ],
+    "active_counts_by_subset": {
+      "LOOP_SEATTLE_5T": 323,
+      "LOOP_SEATTLE_H": 323,
+      "M_DENSE_H": 30,
+      "SZ_TAXI_15T": 156,
+      "bitbrains_fast_storage_5T": 2432,
+      "bitbrains_rnd_5T": 936,
+      "bizitobs_application": 2,
+      "bizitobs_l2c_5T": 7,
+      "bizitobs_l2c_H": 7,
+      "bizitobs_service": 42,
+      "electricity_15T": 370,
+      "electricity_D": 158,
+      "electricity_H": 369,
+      "ett1_15T": 7,
+      "ett1_H": 7,
+      "ett2_15T": 7,
+      "ett2_H": 7,
+      "hierarchical_sales_D": 118,
+      "jena_weather": 21,
+      "jena_weather_10T": 21,
+      "jena_weather_H": 21,
+      "kdd_cup_2018_with_missing_H": 269,
+      "m4_daily": 2658,
+      "m4_monthly": 46,
+      "m4_weekly": 168,
+      "saugeenday_D": 1,
+      "saugeenday_W": 1,
+      "solar_10T": 137,
+      "solar_H": 137,
+      "us_births_D": 1
+    },
+    "missing": [
+      "Approved pilot workload with exact source revisions, item/channel identities and stable IDs",
+      "Staged source checksums and start/frequency metadata",
+      "Context/origin and training/validation/usable bounds per forecast window",
+      "Separately identified current and last-4096 Omega variants with history cutoffs",
+      "Recorded real-workload/model approval references and agreed Omega exchange mapping"
+    ],
+    "owner": "Dayson",
+    "data_access": "Manifest metadata only; no development/held-out arrays or real models opened",
+    "downstream_status": {
+      "real_pilot": "not run",
+      "consumer_acceptance": "not obtained",
+      "real_budget": "incomplete"
+    }
+  },
+  "artifact_directory": "artifacts/runs/pilot-preparation-final",
+  "artifact_sha256": {
+    "ready/report.json": "85d7d1fe1f4d56864555c4e6b4e891aab9238e19d0eb197132fb540d9c38ef7d",
+    "ready/plan.json": "e4c39b3c9141ccb941aeae3edd72506585804b1f9f8fcc184afd800ab8ce342d",
+    "ready/first-plan.json": "8279f4e06b1e2c06bbbeec62605aca4c33054f13a2d0c73e7f726c6b4ef21a7f",
+    "measurement/report.json": "f090db38b2b437f22999ffe3f8f3c48f98372748b32e209e468dde0d50ac2028",
+    "measurement/generation.json": "0e207138281eb500cdb5baccd8824cde9cdf122dadc819c2522b63448a7e8684",
+    "rerun/report.json": "4d24467a031031b98d227844fd444aba997c92f375d4bb912b20020da816d148",
+    "verification.json": "a6d3788623170cb0c944fafed71aea2a93c96ada5e6ef0722aaa0e742d6c446b",
+    "tests.log": "4a275f2164eaa73737a54527e78d33453bba946e8be29226a4cbe0df674d4f56"
+  },
+  "remaining": [
+    "Dayson frozen workload, stable identity mapping and agreed Omega sidecar",
+    "Actual approved pilot and both consumer acceptances (#29)",
+    "Real pilot resource evidence and bounded budget (#30)",
+    "Expanded roster/workload required before a complete study budget"
+  ],
+  "limitations": [
+    "All new execution evidence is fixture-only, not a real pilot or compute budget",
+    "Sampled GPU device memory includes other processes; process RSS is separate from PyTorch allocation",
+    "Proposed restart/failure fractions are not an accepted production budget",
+    "No development or held-out arrays read"
+  ]
+}

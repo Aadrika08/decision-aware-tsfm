@@ -86,6 +86,9 @@ def main(argv=None):
         series_without_validation_kept="interface check only; an analysis run excludes them",
         evaluation_units=int(len(tables["units"])), result_rows=int(len(res)),
         status_counts={f"{s}/{st}": int(n) for (s, st), n in res.groupby(["selector", "status"]).size().items()},
+        undefined_omega_decisions={
+            f"{u}/{r}": int(n) for (u, r), n in
+            tables["undefined_omega"].groupby(["used_for", "reason"], dropna=False).size().items()},
         column_check=dict(units_compared=int((cmp["_merge"] == "both").sum()), unmatched=unmatched,
                           max_relative_difference=rel,
                           q001_vs_q050_max_gap_in_bundle=med_diff))
