@@ -6,16 +6,17 @@ import numpy as np
 import pandas as pd
 
 from .schema import COLUMNS, SCHEMA_VERSION, UNIT_KEYS, validate_selection_frame
-from .selectors import SelectorInput, argmin_family
+from .selectors import SelectorInput, exact_argmin_family
 
 
 def best_fixed(test: pd.DataFrame, group=("horizon", "tau")) -> pd.DataFrame:
-    """Per group, the single family with lowest total scaled test cost (hindsight)."""
+    """Per group, the single family with lowest total scaled test cost (hindsight).
+    Compared exactly; only an exact tie goes to classical."""
     t = test.copy()
     t["sc"] = t.J_classical / t.scale
     t["st"] = t.J_tsfm / t.scale
     g = t.groupby(list(group))[["sc", "st"]].sum().reset_index()
-    g["best_fixed_family"] = argmin_family(g.sc, g.st)
+    g["best_fixed_family"] = exact_argmin_family(g.sc, g.st)
     return g[list(group) + ["best_fixed_family"]]
 
 
@@ -43,7 +44,7 @@ def evaluate(decisions: pd.DataFrame, selector_name: str, test: pd.DataFrame,
         "chosen_family": fam.astype(object),
         "chosen_model": fam.map(representatives).astype(object),
         "realized_cost": realized.astype(float),
-        "oracle_family": argmin_family(d.J_classical, d.J_tsfm),
+        "oracle_family": exact_argmin_family(d.J_classical, d.J_tsfm),
         "oracle_cost": oracle_cost.astype(float),
         "regret": regret.astype(float),
         "scale": d.scale.astype(float),

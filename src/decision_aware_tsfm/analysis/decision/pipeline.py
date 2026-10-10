@@ -10,8 +10,9 @@ from .evaluate import run_selectors
 from .guards import assert_no_held_out
 from .metrics import TAU_GRID
 from .schema import UNIT_KEYS
-from .selectors import (AlwaysClassical, AlwaysTSFM, CRPSValidation, DOmegaLinear,
-                        HindsightOracle, NotFitted, PinballValidation, StaticOmegaRule)
+from .selectors import (FIT_POOL_COLUMNS, AlwaysClassical, AlwaysTSFM, CRPSValidation, DOmegaLinear,
+                        HindsightOracle, LeaveOneDatasetOut, NotFitted, PinballValidation,
+                        StaticOmegaRule)
 
 
 class OmegaJoinError(ValueError):
@@ -42,6 +43,11 @@ def attach_omega(decisions: pd.DataFrame, omega: pd.DataFrame, omega_col: str,
     the omega table is still an error: a missing join is a pipeline fault, not
     an undefined statistic.
 
+    The reason for an undefined value may be supplied in a column named
+    <omega_col>_status (omega_status in a handoff sidecar, omega_levels_status
+    in the frozen manifest). It is carried through as omega_status so the
+    deferral can be reported with its reason; it is not validated here.
+
     Omega exactly 0.0 is refused unless allow_zero_omega is set: the team's
     compute_omega returns 0.0 for degenerate input, which cannot be told apart
     from a real, very low Omega and would make a threshold rule choose
@@ -64,7 +70,9 @@ def attach_omega(decisions: pd.DataFrame, omega: pd.DataFrame, omega_col: str,
     if "origin" in om.columns:
         om = om.rename(columns={"origin": "decision_origin"})
         key.append("decision_origin")
-    om = om[key + [omega_col]].rename(columns={omega_col: "omega"})
+    status_col = f"{omega_col}_status"
+    keep = [omega_col] + ([status_col] if status_col in om.columns else [])
+    om = om[key + keep].rename(columns={omega_col: "omega", status_col: "omega_status"})
     if om.duplicated(key).any():
         raise OmegaJoinError(f"omega table has duplicate keys on {key}")
 
@@ -91,6 +99,16 @@ def attach_omega(decisions: pd.DataFrame, omega: pd.DataFrame, omega_col: str,
     return out
 
 
+def _split_undefined(om: pd.DataFrame, used_for: str) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Take the reason column off attach_omega's output and list the decisions
+    whose Omega is undefined, each with the reason the omega table gave (missing
+    when it gave none). The selector tables keep the value only."""
+    undefined = om["omega"].isna()
+    reason = om.loc[undefined, "omega_status"] if "omega_status" in om.columns else None
+    listed = om.loc[undefined, SERIES_KEYS + ["decision_origin"]].assign(reason=reason, used_for=used_for)
+    return om.drop(columns="omega_status", errors="ignore"), listed
+
+
 def _decision_origins(po: pd.DataFrame, role: str | None) -> pd.DataFrame:
     d = po if role is None else po[po["role"] == role]
     return (d.groupby(SERIES_KEYS)["origin"].min().rename("decision_origin").reset_index())
@@ -114,9 +132,36 @@ def _drop_zero_scale(po: pd.DataFrame, role: str | None) -> tuple[pd.DataFrame, 
     return po[~idx.isin(bad)].copy(), excluded
 
 
+NO_VALIDATION_REASON = ("no validation origins: the earliest-third validation window is empty "
+                        "after the gap rule, so validation comparators cannot be scored")
+
+
+def _drop_without_validation(po: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Remove (series, horizon) groups that have no validation origin.
+
+    Agreed development roles: earliest third of origins for validation, the rest
+    for evaluation. A series only qualifies if its validation third is not empty;
+    otherwise it is excluded with a reason rather than scored with an empty fold.
+    The check is per (series, horizon) because the gap rule depends on horizon."""
+    has_val = (po["role"] == "validation").groupby([po[k] for k in SERIES_KEYS]).any()
+    bad = has_val[~has_val].index
+    if len(bad) == 0:
+        return po, pd.DataFrame(columns=SERIES_KEYS + ["reason"])
+    idx = pd.MultiIndex.from_frame(po[SERIES_KEYS])
+    excluded = bad.to_frame(index=False).assign(reason=NO_VALIDATION_REASON)
+    return po[~idx.isin(bad)].copy(), excluded
+
+
 def build_tables(forecasts, schema_version, representatives, family_of_model, omega,
                  fit_only_datasets=(), val_fraction=1 / 3, taus=TAU_GRID, crps_method="trapezoid",
-                 omega_col="omega_levels", omega_variant=None, allow_zero_omega=False):
+                 omega_col="omega_levels", omega_variant=None, allow_zero_omega=False,
+                 exclude_without_validation=None):
+    """exclude_without_validation: drop (series, horizon) groups with an empty
+    validation third, recording the reason. None (default) means: do so whenever
+    val_fraction > 0. With val_fraction = 0 the caller has chosen to have no
+    validation at all, so nothing is excluded for that reason."""
+    if exclude_without_validation is None:
+        exclude_without_validation = val_fraction > 0
     fc = load_cache(forecasts, schema_version, taus)
     assert_no_held_out(fc["dataset"], "development pipeline")
     assert_no_held_out(fc["config"], "development pipeline")
@@ -126,15 +171,23 @@ def build_tables(forecasts, schema_version, representatives, family_of_model, om
     fit_mask = po.dataset.isin(fit_only_datasets)
     fit_po, fit_excluded = _drop_zero_scale(po[fit_mask], None)
     # fit-only datasets: every origin is used for fitting, so the choice is made before the first one
-    fit_om = attach_omega(_decision_origins(fit_po, None), omega, omega_col, omega_variant, allow_zero_omega)
+    fit_om, fit_undefined = _split_undefined(
+        attach_omega(_decision_origins(fit_po, None), omega, omega_col, omega_variant, allow_zero_omega), "fit")
     fit_units = unit_costs(fit_po, role=None).merge(fit_om.drop(columns="decision_origin"),
                                                     on=SERIES_KEYS, how="left")
 
-    ev, ev_excluded = _drop_zero_scale(assign_roles(po[~fit_mask], val_fraction), "test")
+    ev = assign_roles(po[~fit_mask], val_fraction)
+    no_val = pd.DataFrame(columns=SERIES_KEYS + ["reason"])
+    if exclude_without_validation:
+        ev, no_val = _drop_without_validation(ev)
+    ev, ev_excluded = _drop_zero_scale(ev, "test")
+    ev_excluded = pd.concat([no_val, ev_excluded], ignore_index=True)
     val = unit_costs(ev, "validation")
     test = unit_costs(ev, "test")
     # evaluation datasets: the choice is made at the first test origin
-    ev_om = attach_omega(_decision_origins(ev, "test"), omega, omega_col, omega_variant, allow_zero_omega)
+    ev_om, ev_undefined = _split_undefined(
+        attach_omega(_decision_origins(ev, "test"), omega, omega_col, omega_variant, allow_zero_omega),
+        "evaluation")
     units = test[UNIT_KEYS].merge(ev_om, on=SERIES_KEYS, how="left", validate="m:1")
     # settings recorded so a later step (e.g. a frozen E2 evaluation) can check that
     # these tables were built the way a frozen specification says they must be
@@ -143,7 +196,8 @@ def build_tables(forecasts, schema_version, representatives, family_of_model, om
                     crps_method=crps_method, taus=tuple(float(t) for t in taus),
                     fit_only_datasets=tuple(sorted(fit_only_datasets)),
                     models_scored=tuple(sorted(po["model"].unique().tolist())),
-                    allow_zero_omega=bool(allow_zero_omega))
+                    allow_zero_omega=bool(allow_zero_omega),
+                    exclude_without_validation=bool(exclude_without_validation))
     excluded = pd.concat([ev_excluded.assign(used_for="evaluation"),
                           fit_excluded.assign(used_for="fit")], ignore_index=True)
     return dict(per_origin=ev, fit_units=fit_units,
@@ -153,7 +207,8 @@ def build_tables(forecasts, schema_version, representatives, family_of_model, om
                 n_targets_dropped_missing_y=fc.attrs.get("n_targets_dropped_missing_y", 0),
                 omega_variant=omega_variant, settings=settings,
                 excluded_series_horizons=excluded,
-                n_units_undefined_omega=int(units["omega"].isna().sum()))
+                n_units_undefined_omega=int(units["omega"].isna().sum()),
+                undefined_omega=pd.concat([ev_undefined, fit_undefined], ignore_index=True))
 
 
 def seven_selectors(static_threshold, d_omega):
@@ -161,12 +216,41 @@ def seven_selectors(static_threshold, d_omega):
             PinballValidation(), CRPSValidation(), d_omega, HindsightOracle()]
 
 
-def run(tables, representatives, static_threshold):
-    usable = tables["fit_units"].dropna(subset=["omega", "J_classical", "J_tsfm"])
-    if usable.empty:
-        d_omega = NotFitted("d_omega", "no fit-only datasets supplied")
+FIT_SCHEMES = ("leave_one_dataset_out", "fit_only_datasets")
+
+
+def fit_pool(tables) -> pd.DataFrame:
+    """Every unit a selector may be fitted on: the fit-only datasets (all
+    origins) plus each evaluation dataset's test units with its decision Omega.
+    Leave-one-dataset-out removes the evaluated dataset from this pool."""
+    ev = tables["test"].merge(tables["units"][UNIT_KEYS + ["omega"]], on=UNIT_KEYS,
+                              how="inner", validate="1:1")
+    parts = [f[FIT_POOL_COLUMNS] for f in (tables["fit_units"], ev) if len(f)]
+    return (pd.concat(parts, ignore_index=True) if parts
+            else pd.DataFrame(columns=FIT_POOL_COLUMNS))
+
+
+def run(tables, representatives, static_threshold, fit_scheme="leave_one_dataset_out",
+        min_fit_datasets=2):
+    """Run the seven comparators.
+
+    fit_scheme decides how D_Omega is fitted:
+      leave_one_dataset_out (default, agreed team protocol): one fit per
+          evaluation dataset, on every other dataset; see LeaveOneDatasetOut.
+      fit_only_datasets: one fit on the fit-only datasets, applied everywhere
+          (the earlier scheme; E2 freezes a rule this way).
+    """
+    if fit_scheme == "leave_one_dataset_out":
+        d_omega = LeaveOneDatasetOut.build(fit_pool(tables), tables["units"]["dataset"].unique(),
+                                           min_fit_datasets=min_fit_datasets)
+    elif fit_scheme == "fit_only_datasets":
+        usable = tables["fit_units"].dropna(subset=["omega", "J_classical", "J_tsfm"])
+        if usable.empty:
+            d_omega = NotFitted("d_omega", "no fit-only datasets supplied")
+        else:
+            d_omega = DOmegaLinear.fit(tables["fit_units"])
     else:
-        d_omega = DOmegaLinear.fit(tables["fit_units"])
+        raise ValueError(f"fit_scheme must be one of {FIT_SCHEMES}, got {fit_scheme!r}")
     res = run_selectors(seven_selectors(static_threshold, d_omega), tables["units"],
                         tables["val"], tables["test"], representatives, tables["n_val"])
     return res, d_omega

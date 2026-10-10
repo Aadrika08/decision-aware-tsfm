@@ -11,6 +11,8 @@ selection waits for expansion. The methods are now accepted in
 [ADR 0005](../decisions/0005-pilot-adapter-qualification.md), with a
 [completed synthetic qualification](../results/cache/2026-09-21-pilot-adapter-qualification.md).
 The approved real workload is still missing. No real pilot or full grid is claimed here.
+The [development pilot runbook](development-pilot.md) now provides handoff validation,
+the first comparison slice, Linux measurement commands and consumer acceptance checks.
 
 ## Run the complete fixture flow
 
@@ -42,6 +44,13 @@ mean pinball costs are `2*tau` and `1-tau`. The second series has actuals 7, giv
 costs `1-tau` and `4*(1-tau)`. These are planted checks, not research measurements.
 
 ## Inputs and identities
+
+The proposed production naming extension is documented in the
+[production handoff](production-cache-handoff.md) and ADR 0006. Set both header
+fields `naming_scheme: "dataset-config-v1"` and the actual `source_repository` to
+use separate dataset/config values and an explicit empty config for no variant.
+Both values are hashed into each job. Omitting both retains the historical
+convention; partial/unknown headers and mixed naming plans are rejected.
 
 The JSON workload uses `schema_version: 1`, `split: "development"`, an explicit
 `fixture` boolean, the exact eleven-value `quantiles` list, and nonempty `rows`.

@@ -2,7 +2,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from decision_aware_tsfm.cache.planner import job_identity, plan, target_timestamps
+from decision_aware_tsfm.cache.planner import IDENTITY_FIELDS, job_identity, plan, target_timestamps
 from decision_aware_tsfm.cache.schema import TAUS
 
 
@@ -89,6 +89,74 @@ class PlannerTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             plan(workload(), altered_models, base_dir=self.base)
 
+    def test_production_names_and_repository_provenance(self):
+        names = dict(naming_scheme="dataset-config-v1", source_repository="Salesforce/GiftEval")
+        ett = plan(workload([row(dataset="ett1", config="H")], **names), models(),
+                   base_dir=self.base)["jobs"][0]
+        self.assertEqual((ett["dataset"], ett["config"]), ("ett1", "H"))
+        self.assertEqual((ett["naming_scheme"], ett["source_repository"]),
+                         ("dataset-config-v1", "Salesforce/GiftEval"))
+        self.assertEqual(target_timestamps(ett)[0], ett["origin_timestamp"])
+        self.assertEqual(target_timestamps(ett)[1], "2020-03-26T09:00:00")
+        self.assertEqual(ett["origin"], ett["context_start"] + ett["context_length"])
+        other_repo = plan(workload([row(dataset="ett1", config="H")],
+                                   **dict(names, source_repository="other/GiftEval")),
+                          models(), base_dir=self.base)["jobs"][0]
+        self.assertNotEqual(ett["job_id"], other_repo["job_id"])
+        m4 = plan(workload([row(dataset="m4", config="daily")], **names), models(),
+                  base_dir=self.base)["jobs"][0]
+        self.assertEqual((m4["dataset"], m4["config"]), ("m4", "daily"))
+        absent = plan(workload([row(dataset="synthetic_no_variant", config="")], **names),
+                      models(), base_dir=self.base)["jobs"][0]
+        self.assertEqual(absent["config"], "")
+
+    def test_production_namespaces_allow_item_reuse_and_distinct_channels(self):
+        names = dict(naming_scheme="dataset-config-v1", source_repository="Salesforce/GiftEval")
+        rows = [row(dataset="m4", config="daily", series_id="stable-0"),
+                row(dataset="m4", config="monthly", series_id="stable-0",
+                    source_revision="monthly-v1", source_sha256="b" * 64),
+                row(dataset="m4", config="daily", series_id="stable-1", channel=1)]
+        jobs = plan(workload(rows, **names), models(), base_dir=self.base)["jobs"]
+        self.assertEqual(len(jobs), 3)
+        self.assertEqual({job["item_id"] for job in jobs}, {"item_0"})
+        self.assertEqual({(job["config"], job["channel"], job["series_id"]) for job in jobs},
+                         {("daily", 0, "stable-0"), ("monthly", 0, "stable-0"),
+                          ("daily", 1, "stable-1")})
+
+    def test_legacy_identity_and_incomplete_naming_rejected(self):
+        legacy = plan(workload(), models(), base_dir=self.base)["jobs"][0]
+        self.assertEqual(job_identity(legacy), {field: legacy[field] for field in IDENTITY_FIELDS})
+        self.assertNotIn("source_repository", legacy)
+        for header in ({"naming_scheme": "dataset-config-v1"},
+                       {"source_repository": "Salesforce/GiftEval"},
+                       {"naming_scheme": "other", "source_repository": "Salesforce/GiftEval"},
+                       {"naming_scheme": "dataset-config-v1", "source_repository": ""},
+                       {"naming_scheme": "dataset-config-v1", "source_repository": " Salesforce/GiftEval"},
+                       {"naming_scheme": "dataset-config-v1", "source_repository": "Salesforce/GiftEval "},
+                       {"naming_scheme": "dataset-config-v1", "source_repository": "M5"}):
+            with self.subTest(header=header), self.assertRaises(ValueError):
+                plan(workload(**header), models(), base_dir=self.base)
+        names = dict(naming_scheme="dataset-config-v1", source_repository="Salesforce/GiftEval")
+        for bad in (row(dataset="ett1", config=None), row(dataset="GiftEval", config="ett1/H"),
+                    row(dataset="ett1", config=" H"), row(dataset="ett1", config="H",
+                        source_repository="Salesforce/GiftEval")):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                plan(workload([bad], **names), models(), base_dir=self.base)
+        with self.assertRaises(ValueError):
+            plan(workload([row(config="")]), models(), base_dir=self.base)
+
+    def test_stable_id_cannot_change_source_item_or_channel(self):
+        names = dict(naming_scheme="dataset-config-v1", source_repository="Salesforce/GiftEval")
+        for update in ({"source_revision": "revision-2"}, {"source_sha256": "b" * 64},
+                       {"item_id": "item-2"}, {"channel": 1}):
+            conflicting = row(seed=43, **update)
+            with self.subTest(update=update), self.assertRaisesRegex(ValueError, "stable series ID"):
+                plan(workload([row(), conflicting]), models(), base_dir=self.base)
+            with self.subTest(update=update, naming="production"), self.assertRaisesRegex(ValueError, "stable series ID"):
+                plan(workload([row(dataset="ett1", config="H"),
+                               dict(conflicting, dataset="ett1", config="H")], **names),
+                     models(), base_dir=self.base)
+
     def test_rejects_heldout_aliases_duplicate_logical_rows_and_model_labels(self):
         for update in ({"dataset": "M5"}, {"source_path": "data/pjm/source.arrow"},
                        {"source_revision": "release-M5-final"}, {"series_id": "old_idx_4"}):
@@ -141,6 +209,11 @@ class PlannerTest(unittest.TestCase):
         configured["models"][0]["fixture"] = True
         with self.assertRaises(ValueError):
             plan(workload(), configured, base_dir=self.base)
+        for field, value in (("naming_scheme", "other"), ("source_repository", "other/repo")):
+            configured = models()
+            configured["models"][0][field] = value
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, "protected"):
+                plan(workload(), configured, base_dir=self.base)
 
     def test_heldout_rejection_precedes_bad_path_validation(self):
         with self.assertRaisesRegex(ValueError, "held out"):
