@@ -1,0 +1,4 @@
+within_family,n,spearman_rho,p_value
+mean across family (paper's choice),20,-0.417,0.0677
+median model in family,20,0.045,0.8502
+best model in family,20,-0.063,0.7914
