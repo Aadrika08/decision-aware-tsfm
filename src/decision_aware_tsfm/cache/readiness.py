@@ -53,7 +53,10 @@ def _omega_check(omega, groups, fixture, naming):
                 or not 0 <= start < end <= key[-1]):
             raise ValueError("Omega history must be nonempty and end before the forecast origin")
         value = row["omega"]
-        if (isinstance(value, bool) or not isinstance(value, (int, float))
+        if value is None:
+            if row.get("omega_status") not in ("empty_history", "below_floor", "flat_history", "nonfinite"):
+                raise ValueError("Null Omega requires a recognized undefined omega_status")
+        elif (isinstance(value, bool) or not isinstance(value, (int, float))
                 or not math.isfinite(value) or not 0 <= value <= 1):
             raise ValueError("Omega must be finite and within [0, 1]")
         indexed[joined] = row
@@ -68,12 +71,13 @@ def _omega_check(omega, groups, fixture, naming):
     summary = {}
     for variant in variants:
         rows = [r for k, r in indexed.items() if k[-1] == variant]
-        values = [r["omega"] for r in rows]
+        values = [r["omega"] for r in rows if r["omega"] is not None]
+        undefined = Counter(r["omega_status"] for r in rows if r["omega"] is None)
         summary[variant] = {"description": variants[variant], "rows": len(rows),
-                            "minimum": min(values), "maximum": max(values),
+                            "defined_rows": len(values), "undefined_rows": len(rows) - len(values),
+                            "undefined_reasons": dict(undefined),
+                            "minimum": min(values, default=None), "maximum": max(values, default=None),
                             "history_lengths": sorted({r["history_end"] - r["history_start"] for r in rows})}
-    if summary["current"]["minimum"] == summary["current"]["maximum"]:
-        raise ValueError("Pilot has no documented variation in current Omega")
     return summary
 
 
@@ -118,6 +122,9 @@ def inspect_pilot(workload, models, omega, *, base_dir):
             if len({tuple(j[k] for k in fields) for j in jobs}) != 1:
                 raise ValueError("Comparison jobs disagree on context or split bounds")
         report["omega"] = _omega_check(omega, groups, planned["fixture"], naming)
+        current = report["omega"]["current"]
+        if current["minimum"] == current["maximum"]:
+            raise ValueError("Pilot has no documented variation in current Omega")
         verified = set()
         for job in planned["jobs"]:
             window = (job["source_path"], job["source_sha256"], job["source_length"],
