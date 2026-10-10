@@ -10,6 +10,17 @@ Omega column of the manifest (for example the 4,096-history variant once the
 frozen manifest carries it) and --manifest-version to select the manifest
 layout. The Omega column must be a float column with a value for every series;
 if it is not, the command stops and names the base datasets affected.
+
+The default is the single development file. The data owner's two-file layout
+is opt-in:
+
+    ... --manifest-version manifest-v1 --manifest <series_manifest.json> \
+        --omega-values <omega_values.json> --omega-col omega_levels_4096 \
+        --allow-missing-omega --outdir <new directory>
+
+There an undefined Omega is null with a status. It is never read as 0.0: the
+command stops, or with --allow-missing-omega leaves the series out and prints
+the count by status. The two files must join one to one on series_id.
 """
 from __future__ import annotations
 
@@ -38,6 +49,10 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--manifest-version", default=DEFAULT_MANIFEST_VERSION,
                     choices=list(MANIFEST_VERSIONS),
                     help="layout of the manifest file (default: %(default)s)")
+    ap.add_argument("--omega-values", default=None,
+                    help="the Omega file of the two-file layout (omega_values.json); needed with, "
+                         "and only accepted with, --manifest-version manifest-v1, where "
+                         "--manifest is the series file (default: not used)")
     ap.add_argument("--results", default=DEFAULT_RESULTS,
                     help="concatenated GIFT-Eval results (default: artifacts/reference/k2/gift_results.csv)")
     ap.add_argument("--outdir", default=DEFAULT_OUTDIR,
@@ -49,6 +64,10 @@ def build_parser() -> argparse.ArgumentParser:
                     help="continue when the Omega column has no value for some series; series "
                          "and datasets without a value are left out and the changed n is "
                          "printed (default: stop and list the datasets affected)")
+    ap.add_argument("--exclude-held-out-matches", action="store_true",
+                    help="manifest-v1 only: leave out manifest rows whose names match the "
+                         "held-out rule, before any of their values is used, and print and "
+                         "record them (default: stop and name them)")
     ap.add_argument("--bootstrap-resamples", type=int, default=DEFAULT_RESAMPLES,
                     help="bootstrap resamples per interval, at least 1 (default: %(default)s)")
     ap.add_argument("--seed", type=int, default=DEFAULT_SEED,
@@ -70,6 +89,8 @@ def main(argv: list[str] | None = None) -> None:
                omega_col=args.omega_col, manifest_version=args.manifest_version,
                n_resamples=args.bootstrap_resamples, seed=args.seed, figure=args.figure,
                allow_missing_omega=args.allow_missing_omega,
+               omega_values_path=args.omega_values,
+               exclude_held_out=args.exclude_held_out_matches,
                command=list(sys.argv) if argv is None else ["decision-aware-run-k2", *argv])
     except EXPECTED_ERRORS as exc:
         sys.exit(f"ERROR: {exc}")

@@ -260,6 +260,16 @@ def _echo_held_out(echo, results_report: dict, manifest_report: dict) -> None:
         echo(f"  [WARNING] possible held-out name in the results, NOT dropped: dataset "
              f"{item['dataset']!r}, {item['n_rows']} row(s) ({', '.join(item['reasons'])}). "
              "Check it by hand.")
+    for item in manifest_report.get("held_out_exclusions", []):
+        echo(f"  [WARNING] held-out rule: left out {item['n_rows']} manifest row(s) with "
+             f"{item['field']} = {item['value']!r} ({', '.join(item['reasons'])}), subset(s) "
+             f"{item['subsets']}. If this is not held-out data, this is a false positive of the "
+             "rule and the series is missing from the analysis.")
+    if manifest_report.get("held_out_rows_excluded"):
+        echo(f"  [WARNING] --exclude-held-out-matches is in effect: "
+             f"{manifest_report['held_out_rows_excluded']} manifest row(s) left out in total, by "
+             f"subset {manifest_report['held_out_rows_excluded_by_subset']}; "
+             f"{manifest_report['n_series_used']} series remain.")
     for item in manifest_report.get("held_out_fuzzy_reports", []):
         used = "in a subset the analysis uses" if item["in_a_mapped_subset"] else "in an unused subset"
         echo(f"  [WARNING] possible held-out name in the manifest, NOT refused: {item['field']} = "
@@ -281,10 +291,26 @@ def _echo_missing_omega(echo, omega: OmegaTables) -> None:
     if report["base_datasets_removed_no_selected_omega"]:
         echo(f"  base datasets removed (no series has a value): "
              f"{report['base_datasets_removed_no_selected_omega']}")
+    by_status = report.get("undefined_selected_omega_by_base", {})
     for base, c in report["missing_selected_omega_by_base"].items():
-        echo(f"  {base}: {c['n_missing']} of {c['n_series']} series have no value")
+        status = f" (status {by_status[base]})" if base in by_status else ""
+        echo(f"  {base}: {c['n_missing']} of {c['n_series']} series have no value{status}")
+    if "undefined_selected_omega_by_status" in report:
+        echo("  undefined Omega by status, all datasets: "
+             f"{report['undefined_selected_omega_by_status']}")
+    if report.get("base_datasets_under_half_defined"):
+        echo("  fewer than half of the series have a defined Omega in: "
+             f"{report['base_datasets_under_half_defined']}")
     echo("  Results of this run are not comparable with a run on the full set of datasets.")
     echo("!" * 68)
+
+
+def _echo_zero_omega(echo, omega: OmegaTables) -> None:
+    n_zero = omega.report.get("n_series_selected_omega_exactly_zero", 0)
+    if n_zero:
+        echo(f"  [WARNING] {n_zero} series have Omega exactly 0.0 with status 'ok' in column "
+             f"{omega.omega_col!r}. They are used as values (the file rounds to four places); by "
+             f"base dataset: {omega.report['selected_omega_exactly_zero_by_base']}")
 
 
 def run_k2(results_path: str = DEFAULT_RESULTS, manifest_path: str = DEFAULT_MANIFEST,
@@ -292,14 +318,23 @@ def run_k2(results_path: str = DEFAULT_RESULTS, manifest_path: str = DEFAULT_MAN
            manifest_version: str = DEFAULT_MANIFEST_VERSION,
            n_resamples: int = DEFAULT_RESAMPLES, seed: int = DEFAULT_SEED,
            figure: bool = False, command: list[str] | None = None, echo=print,
-           allow_missing_omega: bool = False) -> dict:
-    """Regenerate every K2 output into a new directory and return the run manifest."""
+           allow_missing_omega: bool = False, omega_values_path: str | None = None,
+           exclude_held_out: bool = False) -> dict:
+    """Regenerate every K2 output into a new directory and return the run manifest.
+
+    omega_values_path and exclude_held_out are for the two-file manifest layout
+    'manifest-v1' (manifest_path is then the series file). The default is the
+    single development file.
+    """
     try:
         n_resamples, seed = check_bootstrap_parameters(n_resamples, seed)
     except ValueError as exc:
         raise InvalidParameterError(str(exc)) from exc
     outdir = check_outdir(outdir)
-    for path, what in ((results_path, "results"), (manifest_path, "manifest")):
+    paths = [(results_path, "results"), (manifest_path, "manifest")]
+    if omega_values_path is not None:
+        paths.append((omega_values_path, "Omega values"))
+    for path, what in paths:
         if not os.path.exists(path):
             raise FileNotFoundError(f"{what} not found at {path}")
 
@@ -309,7 +344,9 @@ def run_k2(results_path: str = DEFAULT_RESULTS, manifest_path: str = DEFAULT_MAN
         echo(warning)
 
     # The manifest is read first: its held_out_strict list is also applied to the results.
-    manifest = read_manifest(manifest_path, manifest_version)
+    manifest = read_manifest(manifest_path, manifest_version,
+                             omega_values_path=omega_values_path,
+                             exclude_held_out=exclude_held_out)
     results, results_report = load_results(results_path, manifest.report.get("held_out_listed", ()))
     absent = sorted(set(SENSITIVITY_METRICS.values()) - set(results.columns))
     if absent:
@@ -320,6 +357,9 @@ def run_k2(results_path: str = DEFAULT_RESULTS, manifest_path: str = DEFAULT_MAN
 
     file_record = manifest.report.get("manifest_file", {})
     echo(f"\nmanifest: {manifest_path} (layout {manifest_version}, Omega column {omega_col})")
+    if omega_values_path is not None:
+        echo(f"  Omega values: {omega_values_path} (joined on series_id, "
+             f"{manifest.report.get('n_omega_rows_read')} rows)")
     echo(f"  frozen: {'yes' if file_record.get('frozen') else 'no'} "
          f"({file_record.get('frozen_basis', 'not recorded')}); "
          f"declared version: {file_record.get('declared_version')}")
@@ -340,6 +380,7 @@ def run_k2(results_path: str = DEFAULT_RESULTS, manifest_path: str = DEFAULT_MAN
             echo(f"  [warn] {family}: mapped models absent from the results: "
                  f"{info['absent_from_results']}")
     _echo_missing_omega(echo, omega)
+    _echo_zero_omega(echo, omega)
 
     diagnostics = model_score_diagnostics(results, omega)
     dominant = dominant_model(diagnostics)
@@ -425,6 +466,9 @@ def run_k2(results_path: str = DEFAULT_RESULTS, manifest_path: str = DEFAULT_MAN
                 echo(f"\nfigure not written: {exc}")
 
         outputs = {name: sha256_file(os.path.join(tmp, name)) for name in sorted(os.listdir(tmp))}
+        inputs = {"results": _input_record(results_path), "manifest": _input_record(manifest_path)}
+        if omega_values_path is not None:
+            inputs["omega_values"] = _input_record(omega_values_path)
         run_manifest = {
             "analysis": "K2a/K2b replication of the Omega relationship (no forecasting model is run)",
             "created_utc": _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -439,8 +483,7 @@ def run_k2(results_path: str = DEFAULT_RESULTS, manifest_path: str = DEFAULT_MAN
                            "sensitivity_metrics": dict(SENSITIVITY_METRICS),
                            "mse_variants": [v[0] for v in MSE_VARIANTS],
                            "degenerate_warn_fraction": DEGENERATE_WARN_FRACTION},
-            "inputs": {"results": _input_record(results_path),
-                       "manifest": _input_record(manifest_path)},
+            "inputs": inputs,
             "manifest_file": file_record,
             "code_sha256": _code_record(),
             "environment": env,

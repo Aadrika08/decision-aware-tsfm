@@ -3,6 +3,10 @@
 Manifest reading is isolated in `read_manifest`, which returns the same
 canonical series table for every manifest layout. Everything downstream
 (`aggregate_omega`, the statistics, the command) depends only on that table.
+
+Two layouts are read. 'dev-v1' is the single development file and the default.
+'manifest-v1' is the data owner's two-file layout (a series file and an Omega
+file joined on series_id), in which an undefined Omega is null with a status.
 """
 from __future__ import annotations
 
@@ -58,10 +62,19 @@ SUBSET_MAP: dict[str, tuple[str, str]] = {
 # The reader checks the claim (same lengths and Omega values) on every run.
 KNOWN_DUPLICATE_SUBSETS: dict[str, str] = {"jena_weather": "jena_weather_10T"}
 
-MANIFEST_VERSIONS: tuple[str, ...] = ("dev-v1", "frozen-v2")
+MANIFEST_VERSIONS: tuple[str, ...] = ("dev-v1", "frozen-v2", "manifest-v1")
 DEFAULT_MANIFEST_VERSION = "dev-v1"
+TWO_FILE_VERSION = "manifest-v1"
 DEFAULT_OMEGA_COLUMN = "omega_levels"
 OMEGA_PREFIX = "omega"
+# manifest-v1: the key of the Omega file, and how each Omega column says whether
+# its value is defined. A value is present exactly when its status is "ok".
+OMEGA_VALUES_KEY = "omega_values"
+OMEGA_STATUS_SUFFIX = "_status"
+OMEGA_STATUS_OK = "ok"
+# A base dataset that keeps fewer than this share of its series with a defined
+# Omega is listed in the report. It is reported, not removed.
+LOW_DEFINED_SHARE = 0.5
 # Column names aggregate_omega computes itself. A manifest column with one of
 # these names would be overwritten without notice, so such a manifest is refused.
 COMPUTED_OMEGA_COLUMNS: tuple[str, ...] = ("omega_sd",)
@@ -85,6 +98,10 @@ class ManifestLayoutError(ValueError):
     """The manifest does not have the layout the chosen version expects."""
 
 
+class ManifestJoinError(ManifestLayoutError):
+    """The series file and the Omega file of a two-file manifest do not join one to one."""
+
+
 class ResultsLayoutError(ValueError):
     """The results file does not have the expected columns."""
 
@@ -95,7 +112,9 @@ class ManifestSeries:
 
     series columns: series_id, source_group, base, freq, length, and every
     Omega column the manifest carries. One row per series that could be
-    matched to a GIFT-Eval (base dataset, frequency).
+    matched to a GIFT-Eval (base dataset, frequency). For 'manifest-v1' the
+    table also carries the text column <Omega column>_status; an undefined
+    Omega is NaN there, never 0.0.
     """
     series: pd.DataFrame
     report: dict = field(default_factory=dict)
@@ -178,8 +197,30 @@ def prepare_results(raw: pd.DataFrame, held_out_listed=()) -> tuple[pd.DataFrame
 # --------------------------------------------------------------------------
 # Omega manifest
 # --------------------------------------------------------------------------
-def read_manifest(path: str, version: str = DEFAULT_MANIFEST_VERSION) -> ManifestSeries:
-    """Read an Omega manifest of the given layout version into the canonical table."""
+def read_manifest(path: str, version: str = DEFAULT_MANIFEST_VERSION,
+                  omega_values_path: str | None = None,
+                  exclude_held_out: bool = False) -> ManifestSeries:
+    """Read an Omega manifest of the given layout version into the canonical table.
+
+    omega_values_path and exclude_held_out belong to the two-file layout
+    'manifest-v1' only; with any other layout they are refused, not ignored.
+    """
+    if version != TWO_FILE_VERSION and (omega_values_path is not None or exclude_held_out):
+        raise ManifestLayoutError(
+            f"--omega-values and --exclude-held-out-matches belong to the two-file layout "
+            f"{TWO_FILE_VERSION!r}; the layout selected is {version!r}, which is one file. "
+            f"Pass --manifest-version {TWO_FILE_VERSION}, or leave the two options out.")
+    if version == TWO_FILE_VERSION:
+        if omega_values_path is None:
+            raise ManifestLayoutError(
+                f"layout {TWO_FILE_VERSION!r} is two files: --manifest is the series file "
+                "(series_manifest.json) and --omega-values is the Omega file (omega_values.json). "
+                "--omega-values was not given.")
+        with open(path, encoding="utf-8") as f:
+            series_raw = json.load(f)
+        with open(omega_values_path, encoding="utf-8") as f:
+            omega_raw = json.load(f)
+        return _from_manifest_v1(series_raw, omega_raw, exclude_held_out=exclude_held_out)
     if version == "dev-v1":
         with open(path, encoding="utf-8") as f:
             raw = json.load(f)
@@ -260,6 +301,176 @@ def _from_dev_v1(raw: dict, subset_map: dict[str, tuple[str, str]] | None = None
         "subsets_used": {k: int(v) for k, v in s.groupby("source_group").size().items()},
     }
     return ManifestSeries(series=s[keep].reset_index(drop=True), report=report)
+
+
+def _from_manifest_v1(series_raw: dict, omega_raw: dict, exclude_held_out: bool = False,
+                      subset_map: dict[str, tuple[str, str]] | None = None) -> ManifestSeries:
+    """Two-file layout of the data owner's manifest-v1.
+
+    series file: {'active_dev_series': [{series_id, subset, length, ...}, ...],
+                  'held_out_strict': [...]}
+    Omega file:  {'omega_values': [{series_id, <column>, <column>_status, ...}, ...]}
+
+    The two are joined on series_id and the join must be one to one. An
+    undefined Omega is null with a status that is not "ok"; it stays undefined
+    (NaN) in the table and is counted by status, it is never read as 0.0. A
+    value of exactly 0.0 with status "ok" is a value (the file rounds to four
+    places) and is counted. A value and a status that disagree are refused.
+
+    Subsets are matched to GIFT-Eval names through SUBSET_MAP, as in dev-v1.
+
+    Held-out names stop the read, as in dev-v1. With exclude_held_out=True the
+    matching rows are left out instead, before any of their values is used, and
+    the report lists them.
+    """
+    subset_map = SUBSET_MAP if subset_map is None else subset_map
+    for raw, key, what in ((series_raw, "active_dev_series", "series"),
+                           (omega_raw, OMEGA_VALUES_KEY, "Omega")):
+        if not isinstance(raw, dict) or key not in raw:
+            keys = sorted(raw) if isinstance(raw, dict) else type(raw).__name__
+            raise ManifestLayoutError(
+                f"{TWO_FILE_VERSION} {what} file needs the key {key!r}; found {keys}")
+    a = pd.DataFrame(series_raw["active_dev_series"])
+    o = pd.DataFrame(omega_raw[OMEGA_VALUES_KEY])
+    for col in ("series_id", "subset", "length"):
+        if col not in a.columns:
+            raise ManifestLayoutError(
+                f"{TWO_FILE_VERSION} series rows need {col!r}; columns: {list(a.columns)}")
+    if "series_id" not in o.columns:
+        raise ManifestLayoutError(
+            f"{TWO_FILE_VERSION} Omega rows need 'series_id'; columns: {list(o.columns)}")
+    in_both = sorted((set(a.columns) & set(o.columns)) - {"series_id"})
+    if in_both:
+        raise ManifestLayoutError(
+            f"column(s) {in_both} are in the series file and in the Omega file; K2 cannot tell "
+            "which one to use")
+    clash = [c for c in COMPUTED_OMEGA_COLUMNS if c in o.columns or c in a.columns]
+    if clash:
+        raise ManifestLayoutError(
+            f"manifest column(s) {clash} have the name of a column K2 computes itself "
+            "(the spread of the selected Omega column across series) and would be overwritten. "
+            "Rename the manifest column before running K2.")
+    _check_one_to_one(a.series_id, o.series_id)
+    merged = a.merge(o, on="series_id", how="inner", validate="one_to_one")
+    if len(merged) != len(a):
+        raise ManifestJoinError(
+            f"joining the series file and the Omega file on series_id gave {len(merged)} rows "
+            f"for {len(a)} series; the ids do not have the same type in the two files")
+
+    # Held-out names: checked on every text field of the joined rows, before any value is used.
+    listed = check_listed(series_raw.get(HELD_OUT_LIST_KEY))
+    fields = identity_fields(merged)
+    strict_hits, fuzzy_hits = held_out_hits(merged, fields, listed)
+    flagged = pd.Series(False, index=merged.index)
+    for hit in strict_hits:
+        flagged |= merged[hit["field"]].astype(str) == hit["value"]
+    if strict_hits and not exclude_held_out:
+        raise HeldOutLeakError(
+            _refusal_message(strict_hits, fields)
+            + "\n  To run without these rows pass --exclude-held-out-matches; they are then left "
+              "out before any value is used, and printed and recorded with their count.")
+    excluded_by_subset = {str(k): int(v) for k, v in
+                          merged.subset[flagged].astype(str).value_counts().sort_index().items()}
+    merged = merged[~flagged]
+    for field_name in fields:
+        assert_no_held_out(merged[field_name].dropna().unique(),
+                           f"K2 manifest (active_dev_series, {field_name})")
+
+    value_cols = [c for c in o.columns if str(c).startswith(OMEGA_PREFIX)
+                  and not str(c).endswith(OMEGA_STATUS_SUFFIX)]
+    undefined, exact_zero = {}, {}
+    for col in value_cols:
+        status_col = f"{col}{OMEGA_STATUS_SUFFIX}"
+        if status_col not in o.columns:
+            raise ManifestLayoutError(
+                f"{TWO_FILE_VERSION} Omega column {col!r} has no {status_col!r} column, so an "
+                "undefined value could not be told from a value")
+        if not pd.api.types.is_float_dtype(merged[col]):
+            continue                      # not usable as Omega; listed in omega_columns_rejected
+        status = merged[status_col]
+        values = merged[col].to_numpy(dtype=float)
+        is_text = status.map(lambda v: isinstance(v, str)).to_numpy(dtype=bool)
+        is_ok = (status == OMEGA_STATUS_OK).to_numpy(dtype=bool)
+        problems = {
+            "have a status that is not text": ~is_text,
+            f"are null with status {OMEGA_STATUS_OK!r}": np.isnan(values) & is_ok,
+            f"have a value with a status other than {OMEGA_STATUS_OK!r}":
+                ~np.isnan(values) & is_text & ~is_ok,
+            "have a value that is not finite": np.isinf(values),
+        }
+        for problem, mask in problems.items():
+            if mask.any():
+                raise ManifestLayoutError(
+                    f"{TWO_FILE_VERSION} Omega column {col!r}: {int(mask.sum())} row(s) {problem}, "
+                    f"for example series {merged.series_id[mask].astype(str).head(3).tolist()}. "
+                    f"A value is expected exactly when {status_col!r} is {OMEGA_STATUS_OK!r}; "
+                    "the file is refused.")
+        undefined[str(col)] = {str(k): int(v) for k, v in
+                               status[np.isnan(values)].value_counts().sort_index().items()}
+        exact_zero[str(col)] = int((values == 0.0).sum())
+
+    unmapped = {str(k): int(v) for k, v in
+                merged.subset[~merged.subset.isin(subset_map)].value_counts().sort_index().items()}
+    s = merged[merged.subset.isin(subset_map)].copy()
+    s["base"] = s.subset.map(lambda x: subset_map[x][0])
+    s["freq"] = s.subset.map(lambda x: subset_map[x][1])
+    s = s.rename(columns={"subset": "source_group"})
+    omega_cols = omega_columns(s)
+    status_cols = [f"{c}{OMEGA_STATUS_SUFFIX}" for c in omega_cols]
+    keep = ["series_id", "source_group", "base", "freq", "length"] + omega_cols + status_cols
+    report = {
+        "manifest_version": TWO_FILE_VERSION,
+        "manifest_file": manifest_file_record(series_raw, TWO_FILE_VERSION),
+        "n_active_series_read": int(len(a)),
+        "n_omega_rows_read": int(len(o)),
+        "join": "series file and Omega file joined on series_id, checked one to one",
+        "n_series_used": int(len(s)),
+        "held_out_rows_found": int(flagged.sum()),
+        "held_out_exclusion_requested": bool(exclude_held_out),
+        "held_out_rows_excluded": int(flagged.sum()),
+        "held_out_rows_excluded_by_subset": excluded_by_subset,
+        "held_out_exclusions": [dict(hit, action="left out, reported") for hit in strict_hits],
+        "held_out_listed": list(listed),
+        "held_out_fields_checked": fields,
+        "held_out_fuzzy_reports": [dict(hit, action="kept, reported only",
+                                        in_a_mapped_subset=bool(hit["subsets"]
+                                                                and set(hit["subsets"]) & set(subset_map)))
+                                   for hit in fuzzy_hits],
+        "omega_columns_available": omega_cols,
+        "omega_columns_rejected": {name: what for name, what in rejected_omega_columns(merged).items()
+                                   if not name.endswith(OMEGA_STATUS_SUFFIX)},
+        "omega_undefined_by_column": undefined,
+        "omega_exactly_zero_by_column": exact_zero,
+        "unmapped_subsets_not_used": unmapped,
+        "known_duplicate_subsets_not_used": {},
+        "mapped_subsets_absent_from_manifest": sorted(set(subset_map) - set(merged.subset)),
+        "subsets_used": {k: int(v) for k, v in s.groupby("source_group").size().items()},
+    }
+    return ManifestSeries(series=s[keep].reset_index(drop=True), report=report)
+
+
+def _check_one_to_one(series_ids: pd.Series, omega_ids: pd.Series) -> None:
+    """Refuse the two files unless every series id is exactly once in each."""
+    series_ids, omega_ids = series_ids.astype(str), omega_ids.astype(str)
+    problems = []
+    for ids, where in ((series_ids, "series file"), (omega_ids, "Omega file")):
+        repeated = sorted(ids[ids.duplicated()].unique())
+        if repeated:
+            problems.append(f"{len(repeated)} series id(s) occur more than once in the {where}, "
+                            f"for example {repeated[:3]}")
+    no_omega = sorted(set(series_ids) - set(omega_ids))
+    no_series = sorted(set(omega_ids) - set(series_ids))
+    if no_omega:
+        problems.append(f"{len(no_omega)} series id(s) have no row in the Omega file, "
+                        f"for example {no_omega[:3]}")
+    if no_series:
+        problems.append(f"{len(no_series)} Omega row id(s) are not in the series file, "
+                        f"for example {no_series[:3]}")
+    if problems:
+        raise ManifestJoinError(
+            f"the series file ({len(series_ids)} rows) and the Omega file ({len(omega_ids)} rows) "
+            "do not join one to one on series_id: " + "; ".join(problems)
+            + ". Nothing was read from either file; the two files must come from the same run.")
 
 
 def _same_series_values(a: pd.DataFrame, subset: str, twin: str) -> bool:
@@ -400,6 +611,7 @@ def aggregate_omega(manifest: ManifestSeries, omega_col: str = DEFAULT_OMEGA_COL
         str(base): {"n_missing": int((~ok).sum()), "n_series": int(len(ok))}
         for base, ok in has_value.groupby(s.base) if (~ok).any()}
     without_value = sorted(b for b, c in missing_by_base.items() if c["n_missing"] == c["n_series"])
+    status_report = _status_report(s, omega_col, has_value, missing_by_base)
     if missing_by_base and not allow_missing:
         lines = [f"Omega column {omega_col!r} has no value for {int((~has_value).sum())} of "
                  f"{len(s)} series, in {len(missing_by_base)} base dataset(s):"]
@@ -407,6 +619,8 @@ def aggregate_omega(manifest: ManifestSeries, omega_col: str = DEFAULT_OMEGA_COL
             note = ("no series has a value: the dataset would leave the analysis"
                     if c["n_missing"] == c["n_series"] else "its Omega would use the remaining series")
             lines.append(f"  {base}: {c['n_missing']} of {c['n_series']} series ({note})")
+        if status_report:
+            lines.append(f"  by status: {status_report['undefined_selected_omega_by_status']}")
         lines.append("  Nothing was written. Fix the column upstream, or pass --allow-missing-omega "
                      "to run on the series that have a value; the changed n is then printed.")
         raise OmegaMissingError("\n".join(lines))
@@ -440,5 +654,34 @@ def aggregate_omega(manifest: ManifestSeries, omega_col: str = DEFAULT_OMEGA_COL
         "missing_selected_omega_by_base": missing_by_base,
         "base_datasets_removed_no_selected_omega": without_value,
     }
+    report.update(status_report)
     return OmegaTables(by_base=by_base, by_base_freq=by_base_freq, omega_col=omega_col,
                        report=report)
+
+
+def _status_report(s: pd.DataFrame, omega_col: str, has_value: pd.Series,
+                   missing_by_base: dict) -> dict:
+    """Why values of the selected column are undefined, and how many are exactly 0.0.
+
+    Only for a layout that carries <Omega column>_status (manifest-v1); for the
+    single-file layout the result is empty and the report keeps its old keys.
+    """
+    status_col = f"{omega_col}{OMEGA_STATUS_SUFFIX}"
+    if status_col not in s.columns:
+        return {}
+    undefined = s.loc[~has_value, ["base", status_col]].astype(str)
+    zero = s.loc[(s[omega_col] == 0.0).to_numpy(), "base"].astype(str)
+    return {
+        "undefined_selected_omega_by_status": {
+            k: int(v) for k, v in undefined[status_col].value_counts().sort_index().items()},
+        "undefined_selected_omega_by_base": {
+            base: {k: int(v) for k, v in rows[status_col].value_counts().sort_index().items()}
+            for base, rows in undefined.groupby("base")},
+        "base_datasets_under_half_defined": {
+            base: {"n_defined": c["n_series"] - c["n_missing"], "n_series": c["n_series"]}
+            for base, c in missing_by_base.items()
+            if 0 < c["n_series"] - c["n_missing"] < LOW_DEFINED_SHARE * c["n_series"]},
+        "n_series_selected_omega_exactly_zero": int(len(zero)),
+        "selected_omega_exactly_zero_by_base": {
+            k: int(v) for k, v in zero.value_counts().sort_index().items()},
+    }
