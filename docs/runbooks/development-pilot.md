@@ -80,9 +80,22 @@ history lengths: a cap is not proof that every series has 4,096 observations.
 
 Additional named variants, including separately described differences, are
 supported when present for every source/origin. Do not relabel full-history Omega
-as a capped value. Undefined/nonfinite values require an upstream decision, not
-fabricated numbers. Descriptions must identify calculation provenance; this tool
+as a capped value. Undefined histories use `"omega": null` with an explicit
+`omega_status` of `empty_history`, `below_floor`, `flat_history` or `nonfinite`.
+A defined value requires an omitted `omega_status` or `ok`, matching the consumer.
+A null value without one of these reasons is rejected. Defined values retain the
+finite `[0, 1]` check; zero is not an undefined placeholder.
+Descriptions must identify calculation provenance; this tool
 validates supplied values/joins and does not recompute or certify their method.
+
+Null descriptor rows keep their source/origin/variant identity and history bounds;
+they do not exempt forecast context/targets from finite-value checks. The readiness
+report includes `defined_rows`, `undefined_rows` and `undefined_reasons` for each
+variant. Ranges use defined values only and are null when none exist. The existing
+current-Omega variation gate still blocks insufficient defined variation, with the
+counts retained in its blocked report. An entirely undefined capped variant is
+reported without dropping forecast jobs when current variation otherwise qualifies.
+Consumers must retain the reason and report Omega-based deferrals separately.
 
 ## Validate and plan without inference
 
