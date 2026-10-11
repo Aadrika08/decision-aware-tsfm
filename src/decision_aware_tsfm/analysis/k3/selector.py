@@ -21,11 +21,17 @@ Deferral reasons are explicit so the frontier can be read:
   unfitted_tau        -- no rule was fitted for this tau
   insufficient_data   -- too few datasets at this tau to fit anything
 
-PROVISIONAL: deferral is costed as the oracle (the deferred case is sent for
-full validation across both families, so the better family is used). That makes
-the frontier an upper bound on the value of deferring and ignores the compute
-the second family costs. The compute price belongs in the E4 write-up; confirm
-with Veer and Pratham before the real run.
+Deferral pricing: a deferred case is sent for validation across both families,
+which is NOT the oracle. The oracle picks whichever family turned out cheaper
+on the test windows, which nobody can know in advance; validation picks the
+cheaper family on the validation origins and then pays that family's actual
+test cost, which is usually higher (Veer, 2026-10-09). So `deferral_cost` is
+supplied by the caller from the engine's pinball-validation comparator.
+
+Falling back to the oracle is still allowed, because it is the only option
+when no comparator is available, but it is an upper bound rather than a
+result: it is why deferring everything scores 1.000. Results say which
+pricing was used, and an oracle-priced result is flagged as a bound.
 """
 import numpy as np
 
@@ -99,6 +105,17 @@ def fit_selector(omega, tau, cost_classical, cost_tsfm, datasets,
             continue
 
         unique = np.unique(values)
+        # A threshold has to sit BETWEEN two Omega values. Enough distinct
+        # datasets is not enough on its own: several datasets can share one
+        # Omega value at a tau, leaving nowhere to place a boundary.
+        if len(unique) < 2:
+            rules[key] = {"status": "insufficient_data",
+                          "reason": "fewer than 2 distinct Omega values, so no "
+                                    "threshold can be placed",
+                          "n_datasets": int(n_datasets), "n_distinct_omega": len(unique),
+                          "required": min_distinct}
+            continue
+
         # Midpoints only: the extremes are "always one family", which is the
         # fixed-family baseline rather than a rule that uses Omega.
         candidates = (unique[:-1] + unique[1:]) / 2
@@ -172,14 +189,23 @@ def apply_selector(spec, omega, tau, margin=0.0):
 
 
 def evaluate_selector(spec, omega, tau, cost_classical, cost_tsfm, datasets,
-                      margin=0.0):
+                      margin=0.0, deferral_cost=None):
     """Score a frozen spec on an UNSEEN subset. Never M5/PJM.
 
-    Deferred cases are costed as the oracle (see the module note): deferring
-    means validating both families, so the better one is used.
+    deferral_cost: per-unit cost of deferring, from the engine's
+    pinball-validation comparator. Omitting it prices deferrals at the oracle,
+    which is an upper bound, and the result is flagged `deferral_pricing:
+    "oracle_upper_bound"` so it is never read as a plain result.
     """
     omega, tau, cost_classical, cost_tsfm, datasets = _check_inputs(
         omega, tau, cost_classical, cost_tsfm, datasets)
+    if deferral_cost is None:
+        deferral_each, pricing = np.minimum(cost_classical, cost_tsfm), "oracle_upper_bound"
+    else:
+        deferral_each, = _validate(deferral_cost)
+        if deferral_each.shape != tau.shape:
+            raise ValueError("deferral_cost length must match tau")
+        pricing = "validation_comparator"
 
     chosen, reasons = [], {}
     for value, point in zip(omega, tau):
@@ -191,7 +217,7 @@ def evaluate_selector(spec, omega, tau, cost_classical, cost_tsfm, datasets,
     deferred = chosen == DEFER
     oracle_each = np.minimum(cost_classical, cost_tsfm)
     decided = np.where(chosen == CLASSICAL, cost_classical, cost_tsfm)
-    realized = float(np.where(deferred, oracle_each, decided).sum())
+    realized = float(np.where(deferred, deferral_each, decided).sum())
 
     always_classical = float(cost_classical.sum())
     always_tsfm = float(cost_tsfm.sum())
@@ -201,6 +227,7 @@ def evaluate_selector(spec, omega, tau, cost_classical, cost_tsfm, datasets,
 
     result = {
         "status": "ok", "margin": float(margin), "n": int(len(tau)),
+        "deferral_pricing": pricing,
         "deferral_rate": float(deferred.mean()),
         "deferrals": int(deferred.sum()), "reasons": dict(sorted(reasons.items())),
         "realized_cost": realized, "oracle_cost": oracle,
@@ -218,12 +245,13 @@ def evaluate_selector(spec, omega, tau, cost_classical, cost_tsfm, datasets,
 
 
 def cost_deferral_frontier(spec, omega, tau, cost_classical, cost_tsfm, datasets,
-                           margins=None):
+                           margins=None, deferral_cost=None):
     """E4: realized cost against deferral rate, as the defer margin widens."""
     if margins is None:
         margins = [0.0, 0.01, 0.02, 0.05, 0.10, 0.15, 0.20, 0.30, 0.50]
     points = [evaluate_selector(spec, omega, tau, cost_classical, cost_tsfm,
-                                datasets, margin=m) for m in sorted(margins)]
+                                datasets, margin=m, deferral_cost=deferral_cost)
+              for m in sorted(margins)]
     return {"points": points,
             "margins": [p["margin"] for p in points],
             "deferral_rates": [p["deferral_rate"] for p in points],
@@ -231,7 +259,8 @@ def cost_deferral_frontier(spec, omega, tau, cost_classical, cost_tsfm, datasets
 
 
 def leave_one_dataset_out(omega, tau, cost_classical, cost_tsfm, datasets,
-                          margin=0.0, min_distinct=MIN_DISTINCT_OMEGA_THRESHOLD):
+                          margin=0.0, min_distinct=MIN_DISTINCT_OMEGA_THRESHOLD,
+                          deferral_cost=None):
     """Fit on all datasets but one, evaluate on the held-out one, and rotate.
 
     The agreed fitting protocol (Veer, confirmed 2026-10-07). With only two
@@ -263,10 +292,14 @@ def leave_one_dataset_out(omega, tau, cost_classical, cost_tsfm, datasets,
             "n_train": int(train.sum()), "n_test": int(test.sum()),
             "selector": evaluate_selector(spec, omega[test], tau[test],
                                           cost_classical[test], cost_tsfm[test],
-                                          datasets[test], margin=margin),
+                                          datasets[test], margin=margin,
+                                          deferral_cost=None if deferral_cost is None
+                                          else np.asarray(deferral_cost)[test]),
             "tau_only": evaluate_selector(baseline, omega[test], tau[test],
                                           cost_classical[test], cost_tsfm[test],
-                                          datasets[test], margin=margin),
+                                          datasets[test], margin=margin,
+                                          deferral_cost=None if deferral_cost is None
+                                          else np.asarray(deferral_cost)[test]),
         })
 
     selector_cost = sum(f["selector"]["realized_cost"] for f in folds)
