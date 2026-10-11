@@ -246,3 +246,68 @@ def test_total_deferral_captures_everything_by_construction():
     assert result["deferral_rate"] == 1.0
     assert result["fraction_of_oracle_value_captured"] == pytest.approx(1.0)
     assert result["realized_cost"] == pytest.approx(result["oracle_cost"])
+
+
+# ------------------------------- Veer's report on #54: no crash, a verdict
+def test_identical_omega_across_datasets_is_insufficient_not_a_crash():
+    """Enough datasets, but all sharing one Omega value: a threshold has
+    nowhere to sit, so this must be insufficient_data, not a TypeError."""
+    spec = fit_selector([0.5] * 3, [0.5] * 3, [1.0] * 3, [2.0] * 3, ["a", "b", "c"])
+    rule = spec["rules"]["0.50"]
+    assert rule["status"] == "insufficient_data"
+    assert rule["n_distinct_omega"] == 1
+    assert rule["n_datasets"] == 3
+    assert apply_selector(spec, 0.5, 0.50) == (DEFER, "insufficient_data")
+
+
+def test_two_distinct_omega_values_are_enough_to_place_a_threshold():
+    spec = fit_selector([0.2, 0.2, 0.8, 0.8], [0.5] * 4, [1.0, 1.0, 5.0, 5.0],
+                        [5.0, 5.0, 1.0, 1.0], ["a", "b", "c", "d"])
+    rule = spec["rules"]["0.50"]
+    assert rule["status"] == "ok"
+    assert 0.2 < rule["threshold"] < 0.8
+
+
+# ----- deferral pricing: the caller's validation comparator, not the oracle
+def test_validation_priced_deferral_costs_more_than_the_oracle():
+    """Validation picks on validation origins and pays that family's test
+    cost, so it cannot beat hindsight. Pricing at the oracle flatters it."""
+    omega, tau, classical, tsfm, datasets = planted(seed=2)
+    spec = fit_selector(*planted(seed=1))
+    validation = np.maximum(classical, tsfm)   # worst case: validation chose wrong
+
+    oracle_priced = evaluate_selector(spec, omega, tau, classical, tsfm, datasets,
+                                      margin=1.0)
+    real_priced = evaluate_selector(spec, omega, tau, classical, tsfm, datasets,
+                                    margin=1.0, deferral_cost=validation)
+
+    assert oracle_priced["deferral_pricing"] == "oracle_upper_bound"
+    assert real_priced["deferral_pricing"] == "validation_comparator"
+    assert real_priced["realized_cost"] > oracle_priced["realized_cost"]
+    assert real_priced["fraction_of_oracle_value_captured"] < 1.0
+
+
+def test_oracle_pricing_is_labelled_a_bound_not_a_result():
+    train, test = planted(seed=1), planted(seed=2)
+    result = evaluate_selector(fit_selector(*train), *test)
+    assert result["deferral_pricing"] == "oracle_upper_bound"
+
+
+def test_deferral_cost_length_is_checked():
+    omega, tau, classical, tsfm, datasets = planted()
+    spec = fit_selector(omega, tau, classical, tsfm, datasets)
+    with pytest.raises(ValueError, match="deferral_cost length"):
+        evaluate_selector(spec, omega, tau, classical, tsfm, datasets,
+                          deferral_cost=np.ones(3))
+
+
+def test_frontier_with_validation_pricing_need_not_fall_to_the_oracle():
+    """With honest pricing, deferring everything no longer scores 1.000."""
+    omega, tau, classical, tsfm, datasets = planted(seed=2)
+    spec = fit_selector(*planted(seed=1))
+    validation = np.maximum(classical, tsfm)
+    frontier = cost_deferral_frontier(spec, omega, tau, classical, tsfm, datasets,
+                                      deferral_cost=validation)
+    assert frontier["points"][-1]["fraction_of_oracle_value_captured"] < 1.0
+    assert all(p["deferral_pricing"] == "validation_comparator"
+               for p in frontier["points"])
