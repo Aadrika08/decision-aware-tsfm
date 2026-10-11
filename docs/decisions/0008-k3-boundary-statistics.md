@@ -1,12 +1,12 @@
-# 0006 — K3 boundary statistics: oracle baseline, unit of analysis, Omega requirements
+# 0008 — K3 boundary statistics: oracle baseline, unit of analysis, Omega requirements
 
 - Date: 2026-09-25
 - Owner: Abdullah
 - Issue: [#23](https://github.com/Aadrika08/decision-aware-tsfm/issues/23), parent [#21](https://github.com/Aadrika08/decision-aware-tsfm/issues/21)
-- Status: proposed. Pending sign-off from the project lead. Veer's positions on
-  the oracle definition and Omega coverage are recorded below and were given as
-  reasoned positions rather than measured results; all three items are
-  pre-registered before any real multi-series K3 result is seen.
+- Status: proposed. Veer signed off on the oracle baseline, the unit of analysis and the
+minimum Omega requirements on PR #32 (2026-10-10), with two conditions now
+implemented: distinct Omega counted per dataset, and band coverage reported
+beside every result. Pending the project lead's sign-off.
 
 ## Scope
 
@@ -101,6 +101,36 @@ supported estimate.
 - Malformed input raises rather than returning a result. Insufficient input
   returns `insufficient_data`. The two are distinct conditions.
 
+## 5. Pricing a deferred unit: the validation comparator, not the oracle
+
+A selector that defers is saying the evidence does not support a call, so the
+unit goes to validation across both families. That is **not** the oracle.
+
+- The **oracle** picks whichever family turned out cheaper on the test windows.
+  Nobody can know that at decision time; it is hindsight.
+- **Validation** picks the cheaper family on that series' validation origins and
+  then pays that family's actual test cost, which is usually higher.
+
+So a deferred unit is priced from the engine's pinball-validation comparator,
+supplied to the selector by the caller. Pricing it at the oracle is why
+deferring everything scored exactly 1.000 of oracle value: the frontier was
+measuring hindsight, not a decision anyone could make.
+
+The oracle fallback remains, because it is the only option when no comparator
+is available, but a result priced that way is labelled
+`deferral_pricing: "oracle_upper_bound"` and is a bound, never a reported
+result. A frontier priced by the comparator is labelled
+`deferral_pricing: "validation_comparator"`.
+
+This settles the item left open as "how a deferred unit is priced" in
+`0007-development-split-and-fitting-roles.md`, section 5. The argument is
+Veer's (2026-10-09); the earlier oracle pricing was mine and it flattered the
+result.
+
+Deferral still carries a compute cost that this pricing does not capture: a
+deferred unit runs both families. The E4 write-up reports the deferral rate
+beside the cost, so the compute side is visible rather than implied.
+
 ## Alternatives considered
 
 - **Worst fixed family as baseline.** Rejected as the headline: it makes a
@@ -111,6 +141,9 @@ supported estimate.
 - **No minimum Omega requirement.** Rejected: a fitted curve always returns a
   boundary, including where none exists, which is the failure mode K3 is meant
   to detect.
+- **Pricing a deferred unit at the oracle.** Rejected: it prices hindsight,
+  so deferring everything scores a perfect result. Retained only as a labelled
+  upper bound when no validation comparator is available.
 
 ## Consequences
 
