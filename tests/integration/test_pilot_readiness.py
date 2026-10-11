@@ -74,6 +74,80 @@ class PilotReadinessTest(unittest.TestCase):
         self.assertEqual(original["jobs"], reordered["jobs"])
         self.assertEqual(original_first["jobs"], first["jobs"])
 
+    def test_reasoned_null_omega_keeps_forecast_windows_and_job_ids(self):
+        _, original, original_first = self.inspect()
+        for reason in ("empty_history", "below_floor", "flat_history", "nonfinite"):
+            for row in self.omega["rows"]:
+                if row["series_id"] == "stable-0" and row["origin"] == 4096:
+                    row.update(omega=None, omega_status=reason)
+            with self.subTest(reason=reason):
+                report, full, first = self.inspect()
+                self.assertEqual(report["status"], "fixture_valid", report)
+                self.assertEqual(full["jobs"], original["jobs"])
+                self.assertEqual(first["jobs"], original_first["jobs"])
+                self.assertEqual((full["planned_jobs"], first["planned_jobs"]), (96, 24))
+                for variant in ("current", "last_4096"):
+                    summary = report["omega"][variant]
+                    self.assertEqual((summary["defined_rows"], summary["undefined_rows"]), (3, 1))
+                    self.assertEqual(summary["undefined_reasons"], {reason: 1})
+                    self.assertEqual((summary["minimum"], summary["maximum"]), (0.2, 0.8))
+
+    def test_null_omega_requires_an_explicit_recognized_reason(self):
+        for reason in (None, "", "ok", "invented", 0, ["flat_history"]):
+            self.workload, self.models, self.omega = handoff(self.root)
+            row = self.omega["rows"][0]
+            row["omega"] = None
+            if reason is not None:
+                row["omega_status"] = reason
+            with self.subTest(reason=reason):
+                report, full, first = self.inspect()
+                self.assertEqual(report["status"], "blocked", report)
+                self.assertIsNone(full)
+                self.assertIsNone(first)
+
+    def test_reasoned_null_does_not_bypass_omega_provenance(self):
+        for scenario in ("future", "missing_variant", "wrong_hash", "bad_cap"):
+            self.workload, self.models, self.omega = handoff(self.root)
+            for row in self.omega["rows"][:2]:
+                row.update(omega=None, omega_status="flat_history")
+            if scenario == "future":
+                self.omega["rows"][0]["history_end"] += 1
+            elif scenario == "missing_variant":
+                self.omega["rows"].pop(1)
+            elif scenario == "wrong_hash":
+                self.omega["rows"][0]["source_sha256"] = "0" * 64
+            else:
+                self.omega["rows"][1]["history_start"] = 1
+            with self.subTest(scenario=scenario):
+                report, full, first = self.inspect()
+                self.assertEqual(report["status"], "blocked", report)
+                self.assertIsNone(full)
+                self.assertIsNone(first)
+
+    def test_all_undefined_capped_omega_is_reported_without_losing_jobs(self):
+        for row in self.omega["rows"]:
+            if row["variant"] == "last_4096":
+                row.update(omega=None, omega_status="below_floor")
+        report, full, first = self.inspect()
+        self.assertEqual(report["status"], "fixture_valid", report)
+        self.assertEqual((full["planned_jobs"], first["planned_jobs"]), (96, 24))
+        summary = report["omega"]["last_4096"]
+        self.assertEqual((summary["defined_rows"], summary["undefined_rows"]), (0, 4))
+        self.assertEqual(summary["undefined_reasons"], {"below_floor": 4})
+        self.assertIsNone(summary["minimum"])
+        self.assertIsNone(summary["maximum"])
+
+    def test_undefined_current_omega_cannot_supply_pilot_variation(self):
+        for row in self.omega["rows"]:
+            if row["variant"] == "current":
+                row.update(omega=None, omega_status="flat_history")
+        report, full, first = self.inspect()
+        self.assertEqual(report["status"], "blocked", report)
+        self.assertIsNone(full)
+        self.assertIsNone(first)
+        self.assertIn("variation", report["reasons"][0])
+        self.assertEqual(report["omega"]["current"]["undefined_rows"], 4)
+
     def test_production_naming_header_matches_omega_handoff(self):
         names = dict(naming_scheme="dataset-config-v1", source_repository="invented/fixture")
         self.workload.update(names)
