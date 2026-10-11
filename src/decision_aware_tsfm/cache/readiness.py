@@ -59,6 +59,8 @@ def _omega_check(omega, groups, fixture, naming):
         elif (isinstance(value, bool) or not isinstance(value, (int, float))
                 or not math.isfinite(value) or not 0 <= value <= 1):
             raise ValueError("Omega must be finite and within [0, 1]")
+        elif "omega_status" in row and row["omega_status"] != "ok":
+            raise ValueError("Defined Omega requires omega_status 'ok' when supplied")
         indexed[joined] = row
     expected = {key + (variant,) for key in groups for variant in variants}
     if indexed.keys() != expected:

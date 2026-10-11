@@ -82,6 +82,7 @@ Additional named variants, including separately described differences, are
 supported when present for every source/origin. Do not relabel full-history Omega
 as a capped value. Undefined histories use `"omega": null` with an explicit
 `omega_status` of `empty_history`, `below_floor`, `flat_history` or `nonfinite`.
+A defined value requires an omitted `omega_status` or `ok`, matching the consumer.
 A null value without one of these reasons is rejected. Defined values retain the
 finite `[0, 1]` check; zero is not an undefined placeholder.
 Descriptions must identify calculation provenance; this tool

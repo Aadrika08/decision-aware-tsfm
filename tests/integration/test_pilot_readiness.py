@@ -124,6 +124,20 @@ class PilotReadinessTest(unittest.TestCase):
                 self.assertIsNone(full)
                 self.assertIsNone(first)
 
+    def test_defined_omega_status_agrees_with_its_value(self):
+        for row in self.omega["rows"]:
+            row["omega_status"] = "ok"
+        report, _, _ = self.inspect()
+        self.assertEqual(report["status"], "fixture_valid", report)
+        for status in (None, "", "flat_history", "nonfinite", "unknown", {}, []):
+            self.omega["rows"][0]["omega_status"] = status
+            with self.subTest(status=status), patch("decision_aware_tsfm.cache.readiness.load_source") as reader:
+                report, full, first = self.inspect()
+                self.assertEqual(report["status"], "blocked", report)
+                self.assertIsNone(full)
+                self.assertIsNone(first)
+                reader.assert_not_called()
+
     def test_all_undefined_capped_omega_is_reported_without_losing_jobs(self):
         for row in self.omega["rows"]:
             if row["variant"] == "last_4096":
