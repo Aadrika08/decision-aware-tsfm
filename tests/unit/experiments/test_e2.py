@@ -568,6 +568,30 @@ class HeldOutGate(_WithFrozen):
         self.assertTrue(np.array_equal(a, b))
         self.assertGreater(a.max(), 0)
 
+    def test_channel_suffix_dim5_is_not_a_held_out_name(self):
+        """A series id ending in '_dim5' holds the letters "m5" but is channel 5, not M5."""
+        dim5 = dict(self.tables)
+        for k in EVAL_FRAMES:
+            dim5[k] = self.tables[k].assign(series_id=lambda d: d.series_id.astype(str) + "_dim5")
+        r = e2.evaluate(self.frozen, dim5)                       # no flag, no ledger
+        self.assertEqual(r.held_out_evaluated, ())
+        self.assertIsNone(r.ledger_entry)
+        self.assertTrue(r.selection.series_id.str.endswith("_dim5").all())
+        plain = e2.evaluate(self.frozen, self.tables)
+        a = r.unit_regret.sort_values(["series_id", "horizon", "tau"]).regret.to_numpy()
+        b = (plain.unit_regret.assign(series_id=lambda d: d.series_id + "_dim5")
+             .sort_values(["series_id", "horizon", "tau"]).regret.to_numpy())
+        self.assertTrue(np.array_equal(a, b))
+        fu = self.tables["fit_units"]                            # fit, freeze and load accept it too
+        spec = _fit(fit_units=fu.assign(series_id=fu.series_id.astype(str) + "_dim5"))
+        self.assertTrue(all(s[2].endswith("_dim5") for s in spec.payload["fit_series"]))
+        sha = e2.freeze(spec, self.dir / "dim5.json")
+        self.assertEqual(e2.load_frozen(self.dir / "dim5.json").sha256, sha)
+        # the suffix does not hide a held-out name in front of it
+        with self.assertRaises(HeldOutLeakError):
+            e2.evaluate(self.frozen, _shared.renamed(dim5, "fx_tau_flip", INVENTED_HELD_OUT))
+        self.assertFalse(self.ledger.exists())
+
     def test_every_held_out_evaluation_appends_one_ledger_line(self):
         r1 = e2.evaluate(self.frozen, self.named, allow_held_out=True, ledger_path=self.ledger)
         lines = e2.read_ledger(self.ledger)

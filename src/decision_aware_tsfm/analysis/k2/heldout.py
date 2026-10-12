@@ -1,8 +1,10 @@
 """Held-out name checks for K2, on top of analysis/decision/guards.py.
 
-guards.py owns the rule (a name containing "m5" or "pjm", ignoring case, is
-held out). This module applies that rule to more places and makes every
-match visible. It reads names only; no held-out data is opened anywhere.
+guards.py owns the rule (ignoring case, a name is held out when it contains
+"pjm", or "m5" with no letter straight before it, so the channel suffix
+"_dim5" is not a match). This module applies that rule to more places and
+makes every match visible. It reads names only; no held-out data is opened
+anywhere.
 
 Two layers:
 
@@ -15,16 +17,18 @@ Two layers:
   fuzzy   The tokens looked for after removing everything that is not a letter
           or a digit, so "M-5", "P.J.M" and "pj_m" match. This rule has false
           positives ("item_5" becomes "item5"), so a fuzzy match is reported
-          and never acted on.
+          and never acted on. It has no letter condition, so "_dim5" and a
+          run-together name such as "retailm5" are reported here.
 """
 from __future__ import annotations
 
 from typing import Iterable
 
-from ..decision.guards import HELD_OUT_TOKENS, is_held_out
+from ..decision.guards import HELD_OUT_TOKENS, held_out_tokens_in
 
-STRICT_RULE = ("substring match on the tokens (analysis/decision/guards.py), plus the manifest's "
-               "held_out_strict entries compared on letters and digits only")
+STRICT_RULE = ("token match (analysis/decision/guards.py): 'pjm' anywhere, 'm5' when no letter "
+               "comes straight before it; plus the manifest's held_out_strict entries compared "
+               "on letters and digits only")
 FUZZY_RULE = ("tokens looked for after removing everything that is not a letter or a digit; "
               "reported, never acted on")
 
@@ -54,10 +58,7 @@ def check_listed(listed) -> tuple[str, ...]:
 
 def strict_reasons(name, listed: Iterable[str] = ()) -> list[str]:
     """Why a name is held out under the strict layer; empty if it is not."""
-    reasons = []
-    if is_held_out(name):
-        low = str(name).replace("\\", "/").lower()
-        reasons.extend(f"token {tok!r}" for tok in HELD_OUT_TOKENS if tok in low)
+    reasons = [f"token {tok!r}" for tok in held_out_tokens_in(name)]
     squashed = squash(name)
     reasons.extend(f"held_out_strict entry {entry!r}" for entry in listed
                    if squash(entry) in squashed)

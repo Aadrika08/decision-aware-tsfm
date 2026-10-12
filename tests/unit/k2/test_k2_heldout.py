@@ -38,7 +38,12 @@ class NameRules(unittest.TestCase):
         cases = {
             "M5_made_up": ["token 'm5'"],
             "pjm_made_up/H/short": ["token 'pjm'"],
-            "ram5gb_cluster/H/short": ["token 'm5'"],          # a false positive, by design visible
+            "store_1_m5/H/short": ["token 'm5'"],
+            "x_m5_y": ["token 'm5'"],
+            "m5_made_up__item_0_dim5": ["token 'm5'"],
+            "pjm_made_up__item_0_dim5": ["token 'pjm'"],        # "_dim5" adds no 'm5' reason
+            "ram5gb_cluster/H/short": [],                       # "m5" inside a word: not strict
+            "ett1_H__item_0_dim5": [],                          # the manifest's channel suffix
             "electricity_H": [],
             "M-5_Retail": [],                                   # not strict without the list
             "P.J.M": [],
@@ -61,7 +66,9 @@ class NameRules(unittest.TestCase):
     def test_fuzzy_layer_known_answers(self):
         cases = {"M-5_Retail": ["m5"], "m 5": ["m5"], "P.J.M": ["pjm"], "pj_m_hourly": ["pjm"],
                  "Walmart_M_5": ["m5"], "ett1_H_item_5": ["m5"], "electricity_H": [],
-                 "m4_hourly": []}
+                 "m4_hourly": [],
+                 # no letter condition in this layer: what the strict layer lets through is reported
+                 "ett1_H__item_0_dim5": ["m5"], "ram5gb_cluster": ["m5"], "retailm5": ["m5"]}
         for name, tokens in cases.items():
             with self.subTest(name=name):
                 self.assertEqual(fuzzy_reasons(name),
@@ -166,17 +173,23 @@ class ResultsGuard(unittest.TestCase):
         return [metric_row(d, m, 5.0) for d in datasets for m in ("TiRex", "PatchTST")]
 
     def test_exclusions_are_listed_with_counts_and_reasons(self):
-        raw = tiny_results(self.fake("ram5gb_cluster/H/short", "M-5/D/short", "PJM/H/short"))
+        raw = tiny_results(self.fake("store_1_m5/H/short", "ram5gb_cluster/H/short", "M-5/D/short",
+                                     "PJM/H/short"))
         r, report = prepare_results(raw)
         self.assertEqual(report["held_out_exclusions"], [
             {"dataset": "PJM/H/short", "n_rows": 2, "reasons": ["token 'pjm'"]},
-            {"dataset": "ram5gb_cluster/H/short", "n_rows": 2, "reasons": ["token 'm5'"]}])
+            {"dataset": "store_1_m5/H/short", "n_rows": 2, "reasons": ["token 'm5'"]}])
         self.assertEqual(report["held_out_rows_excluded"], 4)
+        fuzzy_reason = ["token 'm5' after removing punctuation"]
         self.assertEqual(report["held_out_fuzzy_reports"], [
             {"dataset": "M-5/D/short", "n_rows": 2, "action": "kept, reported only",
-             "reasons": ["token 'm5' after removing punctuation"]}])
+             "reasons": fuzzy_reason},
+            {"dataset": "ram5gb_cluster/H/short", "n_rows": 2, "action": "kept, reported only",
+             "reasons": fuzzy_reason}])
         self.assertIn("M-5/D/short", set(r.dataset))             # reported, not dropped
-        self.assertNotIn("ram5gb_cluster/H/short", set(r.dataset))
+        self.assertIn("ram5gb_cluster/H/short", set(r.dataset))  # "m5" inside a word: the same
+        self.assertNotIn("store_1_m5/H/short", set(r.dataset))
+        self.assertNotIn("PJM/H/short", set(r.dataset))
 
     def test_the_manifests_list_is_applied_to_the_results(self):
         raw = tiny_results(self.fake("M-5_Retail/D/short"))
@@ -201,24 +214,30 @@ class CommandOutput(unittest.TestCase):
         return code, text, out
 
     def test_dropped_results_rows_are_printed_and_fuzzy_names_are_printed_and_kept(self):
-        fake = [metric_row(d, m, 5.0) for d in ("ram5gb_cluster/H/short", "M-5/D/short")
+        fake = [metric_row(d, m, 5.0)
+                for d in ("store_1_m5/H/short", "ram5gb_cluster/H/short", "M-5/D/short")
                 for m in ("TiRex", "PatchTST")]
         manifest = tiny_manifest([series_row("ett1_H", "ett1_H_item_5", omega_levels=0.1)])
         code, text, out = self.run_with(manifest, tiny_results(fake))
         self.assertEqual(code, 0)
         for part in ("[WARNING] held-out rule: dropped 2 results row(s) of dataset "
-                     "'ram5gb_cluster/H/short' (token 'm5')", "false positive",
+                     "'store_1_m5/H/short' (token 'm5')", "false positive",
                      "possible held-out name in the results, NOT dropped: dataset 'M-5/D/short', "
                      "2 row(s)",
+                     "possible held-out name in the results, NOT dropped: dataset "
+                     "'ram5gb_cluster/H/short', 2 row(s)",
                      "possible held-out name in the manifest, NOT refused: series_id = "
                      "'ett1_H_item_5', 1 row(s), in a subset the analysis uses"):
             self.assertIn(part, text)
+        self.assertNotIn("dropped 2 results row(s) of dataset 'ram5gb_cluster/H/short'", text)
         with open(os.path.join(out, "run_manifest.json"), encoding="utf-8") as f:
             held = json.load(f)["held_out"]
         self.assertEqual(held["results_rows_excluded"], 2)
         self.assertEqual([e["dataset"] for e in held["results_exclusions"]],
-                         ["ram5gb_cluster/H/short"])
-        self.assertEqual([e["dataset"] for e in held["results_fuzzy_reports"]], ["M-5/D/short"])
+                         ["store_1_m5/H/short"])
+        self.assertEqual([e["dataset"] for e in held["results_fuzzy_reports"]],
+                         ["M-5/D/short", "ram5gb_cluster/H/short"])
+        self.assertIn("'m5' when no letter comes straight before it", held["rule"])
         self.assertEqual([e["value"] for e in held["manifest_fuzzy_reports"]], ["ett1_H_item_5"])
         self.assertEqual(held["manifest_fields_checked"], ["series_id", "subset"])
 
