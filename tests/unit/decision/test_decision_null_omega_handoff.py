@@ -28,8 +28,12 @@ SID = "fx_tsfm_wins/s0"
 DECISION_ORIGIN = 1025           # first test origin: the Omega row the evaluation decision uses
 OMEGA_BASED = ("static_omega", "d_omega")
 OTHERS = ("always_classical", "always_tsfm", "pinball_validation", "crps_validation", "hindsight_oracle")
+# The bundle below has three datasets, so a fold has two others: below the default floor of 3.
+# These tests are about null Omega, so they ask for 2 and keep D_Omega fitted.
+MIN_FIT_DATASETS = 2
 CHECK_ARGS = ["--variant", "current", "--classical", "AutoETS", "--tsfm", "Moirai-small",
-              "--static-threshold", "0.45", "--fit-only-datasets", "fx_dfit"]
+              "--static-threshold", "0.45", "--fit-only-datasets", "fx_dfit",
+              "--min-fit-datasets", str(MIN_FIT_DATASETS)]
 
 
 def _frame():
@@ -68,7 +72,7 @@ def _engine(root, variant="current"):
     fc, omega, rep = read_handoff(root, variant)
     t = build_tables(fc, PRODUCER_SCHEMA, REPRESENTATIVES, FAMILY_OF_MODEL, omega,
                      fit_only_datasets=FIT_ONLY_DATASETS, omega_col="omega", omega_variant=variant)
-    res, d = run(t, REPRESENTATIVES, FIXTURE_STATIC_THRESHOLD)
+    res, d = run(t, REPRESENTATIVES, FIXTURE_STATIC_THRESHOLD, min_fit_datasets=MIN_FIT_DATASETS)
     return t, res, d, rep
 
 
@@ -263,6 +267,19 @@ class NullOmegaInBundle(unittest.TestCase):
         rep = json.loads((out / "report.json").read_text(encoding="utf-8"))
         self.assertEqual(rep["omega_undefined_rows_for_variant"], 0)
         self.assertEqual(rep["undefined_omega_decisions"], {})
+
+    def test_check_command_default_floor_leaves_a_three_dataset_bundle_unfitted(self):
+        """Without --min-fit-datasets the command uses the recorded floor of 3 other datasets."""
+        out = Path(self.tmp.name) / "out"
+        args = [a for a in CHECK_ARGS if a not in ("--min-fit-datasets", str(MIN_FIT_DATASETS))]
+        quiet_check([str(self.root)] + args + ["--out", str(out)])
+        rep = json.loads((out / "report.json").read_text(encoding="utf-8"))
+        self.assertEqual(rep["d_omega"]["min_fit_datasets"], 3)
+        for fold in rep["d_omega"]["folds"].values():
+            self.assertIn("2 other dataset(s) with usable units, need 3", fold["not_fitted"])
+        n = len(TAU_GRID)
+        self.assertEqual(rep["status_counts"]["d_omega/insufficient_data"], 4 * n)
+        self.assertEqual(rep["status_counts"]["static_omega/selected"], 4 * n)
 
 
 class ReasonFromAPerSeriesOmegaTable(unittest.TestCase):
