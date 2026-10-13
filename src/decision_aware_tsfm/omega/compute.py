@@ -61,39 +61,49 @@ def compute_omega(series: np.ndarray, diffs: bool = False) -> float:
 
     return float(np.clip(omega, 0.0, 1.0))
 
-# Reasons a history has no meaningful Omega. Stored alongside a null value
-# rather than a fabricated 0.0: a 0.0 reads as a real "very low Omega" and
-# would push a static rule towards the classical family (agreed with Veer;
-# the Omega comparators defer on null and the count is reported).
+# --- Defined-or-undefined wrapper (compute_omega above is unchanged) --------
+# Undefined Omega is returned as None with a status string, never as 0.0,
+# because downstream consumers refuse an Omega of exactly 0.0.
+
 OMEGA_OK = "ok"
-OMEGA_EMPTY = "empty_history"      # fewer than 2 finite observations
-OMEGA_BELOW_FLOOR = "below_floor"  # finite observations below min_finite
-OMEGA_FLAT = "flat_history"        # constant series (or constant differences)
+OMEGA_EMPTY = "empty_history"
+OMEGA_BELOW_FLOOR = "below_floor"
+OMEGA_FLAT = "flat_history"
+OMEGA_NEAR_FLAT = "near_flat"
+
+# A series is "effectively flat" when at least this share of the points Omega
+# is computed on (levels, or diffs when diffs=True) take one single value.
+# Flat-with-one-spike series give a meaningless Omega whose value depends only
+# on where the spike sits (anything from 0 to about 0.05), so it is undefined.
+NEAR_FLAT_SHARE = 0.99
+
+
+def mode_share(series):
+    """Share of finite points equal to the most common value; None if empty."""
+    ts = np.asarray(series, dtype=np.float64)
+    ts = ts[np.isfinite(ts)]
+    if len(ts) == 0:
+        return None
+    _, counts = np.unique(ts, return_counts=True)
+    return float(counts.max() / len(ts))
 
 
 def compute_omega_checked(series, diffs: bool = False, min_finite: int = 0):
-    """Same Omega as compute_omega, but returns (value, reason) and never
-    reports a degenerate history as 0.0.
-
-    value is a float in [0, 1] when reason == "ok", otherwise None.
-    min_finite applies the source paper's stability floor (1,000) to the
-    count of finite observations; 0 disables it.
-    """
+    """Returns (omega, status). omega is None whenever status is not "ok"."""
     ts = np.asarray(series, dtype=np.float64)
     ts = ts[np.isfinite(ts)]
     n_finite = len(ts)
-
     if n_finite < 2:
         return None, OMEGA_EMPTY
     if min_finite and n_finite < min_finite:
         return None, OMEGA_BELOW_FLOOR
-
     x = np.diff(ts) if diffs else ts
     if len(x) < 2:
         return None, OMEGA_EMPTY
     if np.ptp(x) == 0:
         return None, OMEGA_FLAT
-
+    if mode_share(x) >= NEAR_FLAT_SHARE:
+        return None, OMEGA_NEAR_FLAT
     value = compute_omega(ts, diffs=diffs)
     if not np.isfinite(value):
         return None, "nonfinite"

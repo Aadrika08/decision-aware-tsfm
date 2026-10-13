@@ -9,12 +9,12 @@ import pyarrow.feather as feather
 import pyarrow.ipc as ipc
 from datasets import load_from_disk
 try:
-    from omega import compute_omega_checked  # stage0 folder
+    from omega import compute_omega_checked, mode_share  # stage0 folder
 except ImportError:  # repo layout after main's restructure
     import sys
     from pathlib import Path
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-    from decision_aware_tsfm.omega.compute import compute_omega_checked
+    from decision_aware_tsfm.omega.compute import compute_omega_checked, mode_share
 
 DATA_DIR = "./gift_eval_data"
 
@@ -53,9 +53,12 @@ PRED_LENGTH_MAP = {"M": 12, "W": 8, "D": 30, "H": 48, "T": 48, "S": 60}
 TERM_MULTIPLIERS = {"short": 1, "medium": 10, "long": 15}
 
 
+OMEGA_DECIMALS = 6  # 4 places rounded some small positive values to exactly 0.0
+
+
 def r(v):
-    """Round an Omega value to 4 places; None (undefined Omega) passes through."""
-    return None if v is None else round(v, 4)
+    """Round an Omega value; None (undefined Omega) passes through."""
+    return None if v is None else round(v, OMEGA_DECIMALS)
 
 
 def maybe_reconvert_freq(freq: str) -> str:
@@ -268,9 +271,9 @@ def process_all_gift_eval():
         print(f"Data directory '{DATA_DIR}' not found")
         return
 
-    dataset_dirs = glob.glob(
+    dataset_dirs = sorted(glob.glob(
         os.path.join(DATA_DIR, "**", "dataset_info.json"), recursive=True
-    )
+    ))  # sorted: glob order differs between machines
     print(f"Found {len(dataset_dirs)} dataset partitions. Processing...")
 
     for info_file in dataset_dirs:
@@ -296,7 +299,7 @@ def process_all_gift_eval():
             extracted_series = extract_targets_from_dataset(ds)
         except Exception:
             ds = None
-            arrow_files = glob.glob(os.path.join(dir_path, "*.arrow"), recursive=True)
+            arrow_files = sorted(glob.glob(os.path.join(dir_path, "*.arrow"), recursive=True))
             for af in arrow_files:
                 if "cache" in af:
                     continue
@@ -409,6 +412,8 @@ def process_all_gift_eval():
                     "omega_levels_4096_status": omega_lev_4096_status,
                     "omega_diffs_4096": r(omega_dif_4096),
                     "omega_diffs_4096_status": omega_dif_4096_status,
+                    "mode_share": r(mode_share(ts)),
+                    "mode_share_4096": r(mode_share(ts_4096)),
                     "history_length_4096": len(ts_4096),
                     "history_start_index_4096": history_start_index_4096,
                 }
@@ -418,19 +423,20 @@ def process_all_gift_eval():
     # forecast cache actually keys against. Kept separate from Omega values
     # per Aadrika's note: "Omega stays in a separate join, so adding a
     # variant won't invalidate unchanged forecasts."
-    with open("series_manifest.json", "w") as f:
-        json.dump(
-            {
-                "active_dev_series": dev_manifest,
-                "excluded_series": excluded_series,
-                "held_out_strict": ["M5_Retail", "PJM_Electricity"],
-            },
-            f,
-            indent=4,
-        )
+    # utf-8 + LF on every OS so the hash of the file on disk equals the hash
+    # of the committed bytes. The excluded list (most of the old 84 MiB) is
+    # written to its own file so the frozen manifest stays small.
+    def write_json(path, obj):
+        with open(path, "w", encoding="utf-8", newline="\n") as f:
+            json.dump(obj, f, indent=4)
 
-    with open("omega_values.json", "w") as f:
-        json.dump({"omega_values": omega_values}, f, indent=4)
+    write_json("series_manifest.json", {
+        "active_dev_series": dev_manifest,
+        "held_out_strict": ["M5_Retail", "PJM_Electricity"],
+        "excluded_series_file": "excluded_series.json",
+    })
+    write_json("excluded_series.json", {"excluded_series": excluded_series})
+    write_json("omega_values.json", {"omega_values": omega_values})
 
     print(f"\nManifest Generation Complete")
     print(f"Active Series (>=1000 ts): {len(dev_manifest)}")
