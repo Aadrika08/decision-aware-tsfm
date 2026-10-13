@@ -377,7 +377,7 @@ class HeldOutGuard(unittest.TestCase):
             "config": pair("ett1_15T", "b", config="pjm_made_up/H"),
             "dataset": pair("ett1_15T", "b", dataset="Made/PJM_made_up"),
             "item_id": pair("ett1_15T", "b", item_id="m5_made_up_item"),
-            "series_id": pair("ett1_15T", "b", series_id="ett1_15T__b_dim5"),
+            "series_id": pair("ett1_15T", "b", series_id="m5_made_up__b_dim5"),
         }
         for field_name, bad in cases.items():
             with self.subTest(field=field_name), self.assertRaises(HeldOutLeakError) as ctx:
@@ -386,6 +386,31 @@ class HeldOutGuard(unittest.TestCase):
             self.assertIn(f"{field_name} = ", message)
             self.assertIn("1 row(s)", message)
             self.assertIn("--exclude-held-out-matches", message)
+
+    def test_channel_suffix_dim5_is_not_a_held_out_name(self):
+        """'_dim5' contains the letters "m5" but is the manifest's channel 5, not M5."""
+        extra = [pair("ett1_15T", "b", full=0.5, series_id="ett1_15T__b_dim5"),
+                 pair("ett2_15T", "c", full=0.7, series_id="ett2_15T__c_dim50")]
+        plain = _from_manifest_v1(*tiny_v1(extra))                # no opt-in needed
+        self.assertIn("ett1_15T__b_dim5", set(plain.series.series_id))
+        self.assertIn("ett2_15T__c_dim50", set(plain.series.series_id))
+        report = plain.report
+        self.assertEqual((report["held_out_rows_found"], report["held_out_rows_excluded"],
+                          report["held_out_exclusions"]), (0, 0, []))
+        self.assertEqual((report["n_active_series_read"], report["n_series_used"]), (7, 7))
+        by_base = aggregate_omega(plain, FULL).by_base.set_index("base")
+        self.assertAlmostEqual(by_base.loc["ett1", FULL], 0.3)   # 0.1 and 0.5: the dim5 value is used
+        self.assertEqual(by_base.loc["ett1", "n_series"], 2)
+        # Still visible: the punctuation-insensitive layer reports both ids and keeps them.
+        self.assertEqual([(h["field"], h["value"], h["action"], h["in_a_mapped_subset"])
+                          for h in report["held_out_fuzzy_reports"]],
+                         [("series_id", "ett1_15T__b_dim5", "kept, reported only", True),
+                          ("series_id", "ett2_15T__c_dim50", "kept, reported only", True)])
+        # The opt-in has nothing to leave out, so it changes nothing.
+        asked = _from_manifest_v1(*tiny_v1(extra), exclude_held_out=True)
+        pd.testing.assert_frame_equal(plain.series, asked.series)
+        self.assertEqual((asked.report["held_out_rows_found"], asked.report["held_out_rows_excluded"]),
+                         (0, 0))
 
     def test_the_manifests_own_list_is_applied(self):
         bad = pair("ett1_15T", "b", item_id="store_M-5.Retail_001")
@@ -400,7 +425,7 @@ class HeldOutGuard(unittest.TestCase):
 
     def test_opt_in_exclusion_leaves_the_rows_out_and_counts_them(self):
         extra = [pair("ett1_15T", "b", full=0.5),
-                 pair("ett1_15T", "c", full=0.9, series_id="ett1_15T__c_dim5"),
+                 pair("ett1_15T", "c", full=0.9, series_id="ett1_15T__c_m5"),
                  pair("ett2_15T", "d", full=0.7, item_id="pjm_made_up_item")]
         m = _from_manifest_v1(*tiny_v1(extra), exclude_held_out=True)
         self.assertEqual(sorted(m.series.series_id),
@@ -412,7 +437,7 @@ class HeldOutGuard(unittest.TestCase):
         self.assertEqual(report["held_out_rows_excluded_by_subset"], {"ett1_15T": 1, "ett2_15T": 1})
         self.assertEqual(sorted((e["field"], e["value"], e["n_rows"])
                                 for e in report["held_out_exclusions"]),
-                         [("item_id", "pjm_made_up_item", 1), ("series_id", "ett1_15T__c_dim5", 1)])
+                         [("item_id", "pjm_made_up_item", 1), ("series_id", "ett1_15T__c_m5", 1)])
         # The excluded values are not used: ett1 is 0.1 and 0.5, ett2 only its H series.
         by_base = aggregate_omega(m, FULL).by_base.set_index("base")
         self.assertAlmostEqual(by_base.loc["ett1", FULL], 0.3)
@@ -541,16 +566,16 @@ class Command(unittest.TestCase):
 
     def test_held_out_name_stops_the_command_and_the_opt_in_leaves_it_out(self):
         bad = (pair("ett1_15T", "b", full=0.5),
-               pair("ett1_15T", "c", full=0.9, series_id="ett1_15T__c_dim5"))
+               pair("ett1_15T", "c", full=0.9, series_id="M5_made_up__c_dim5"))
         code, _, out = run_v1(bad)
         self.assertTrue(str(code).startswith("ERROR"))
-        self.assertIn("series_id = 'ett1_15T__c_dim5'", str(code))
+        self.assertIn("series_id = 'M5_made_up__c_dim5'", str(code))
         self.assertIn("held-out", str(code))
         self.assertFalse(os.path.exists(out))
         code, text, out = run_v1(bad, "--exclude-held-out-matches")
         self.assertEqual(code, 0)
         for part in ("[WARNING] held-out rule: left out 1 manifest row(s) with series_id = "
-                     "'ett1_15T__c_dim5'", "token 'm5'", "false positive",
+                     "'M5_made_up__c_dim5'", "token 'm5'", "false positive",
                      "1 manifest row(s) left out in total"):
             self.assertIn(part, text)
         with open(os.path.join(out, "run_manifest.json"), encoding="utf-8") as f:
@@ -562,6 +587,31 @@ class Command(unittest.TestCase):
         ett1 = joined[joined.dataset == "ett1"].iloc[0]
         self.assertAlmostEqual(ett1[FULL], 0.3)                  # 0.1 and 0.5; 0.9 is left out
         self.assertEqual(ett1.n_series, 2)
+
+    def test_dim5_series_id_runs_without_the_opt_in_and_is_printed(self):
+        rows = (pair("ett1_15T", "b", full=0.5),
+                pair("ett1_15T", "c", full=0.9, series_id="ett1_15T__c_dim5"))
+        code, text, out = run_v1(rows)
+        self.assertEqual(code, 0)
+        self.assertIn("possible held-out name in the manifest, NOT refused: series_id = "
+                      "'ett1_15T__c_dim5', 1 row(s), in a subset the analysis uses", text)
+        self.assertNotIn("held-out rule: left out", text)
+        self.assertNotIn("--exclude-held-out-matches is in effect", text)
+        with open(os.path.join(out, "run_manifest.json"), encoding="utf-8") as f:
+            m = json.load(f)
+        self.assertEqual(m["held_out"]["manifest_rows_found"], 0)
+        self.assertEqual(m["manifest_report"]["held_out_rows_excluded"], 0)
+        self.assertEqual(m["manifest_report"]["n_series_used"], 7)
+        joined = pd.read_csv(os.path.join(out, "joined_table.csv"))
+        ett1 = joined[joined.dataset == "ett1"].iloc[0]
+        self.assertAlmostEqual(ett1[FULL], 0.5)                  # 0.1, 0.5 and 0.9: all three used
+        self.assertEqual(ett1.n_series, 3)
+        # With the opt-in the same tables come out: there is nothing for it to leave out.
+        code, _, out_asked = run_v1(rows, "--exclude-held-out-matches")
+        self.assertEqual(code, 0)
+        for name in sorted(EXPECTED_TABLES):
+            self.assertEqual(sha256_file(os.path.join(out, name)),
+                             sha256_file(os.path.join(out_asked, name)), name)
 
     def test_join_mismatch_and_missing_second_file_are_clean_errors(self):
         d = scratch_dir()
