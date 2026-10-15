@@ -54,7 +54,7 @@ The bundle contains the original inputs, separately labelled approved execution
 inputs, all 55 source arrays, both Omega variants, the five-file role export,
 the immutable first plan, copied-bundle audit, hashes and local ingress reports.
 Evidence retains the untouched original ZIP, preflight, full/first plans, role
-checks, measurement/generation reports and raw GNU-time/GPU/stdout/stderr logs.
+exports, measurement/generation reports and raw GNU-time/GPU/stdout/stderr logs.
 The [JSON record](2026-10-15-real-pilot/first-slice.json) retains exact values.
 
 After unpacking the bundle, use the preserved qualification Python and current
@@ -87,6 +87,44 @@ not substitute for Veer's or Abdullah's explicit acceptance of the real cache.
 AutoARIMA dominates this slice. Although the budget estimator's twelve timing
 signatures are all covered, this is not representative timing across 55 series
 or 904 origins. No full-pilot finish date or final-study compute budget is inferred.
+
+The first slice alone used **0.124013 CPU resource hours and 0.001450 CUDA
+resource hours**, with **479,885 bytes** of Parquet output. Resource occupancy
+sums measured inference plus explicit loading/I/O components; it is distinct
+from the 454-second measured elapsed time. A separate proposed 10% restart plus
+10% failure scenario gives 0.148816 CPU and 0.001740 CUDA resource hours.
+These allowances are not observed costs or approval for the full study.
+
+## Continuation snapshot and operation
+
+The [timestamped continuation record](2026-10-15-real-pilot/continuation.json)
+records the running full pilot and its monitor. A controlled SIGTERM interrupted
+the continuation after 24 verified cache hits, before another partition was
+published. Its 196.1125 seconds of canceled attempt time are retained separately
+from successful inference. The partial audit found 24 valid and 21,672 missing
+partitions, with no corruption, unexpected files, duplicates or mismatched actuals.
+The resumed run skipped all 24 existing partitions; their hashes still match.
+
+A detached completion monitor is active in the frozen execution worktree. After
+generation, it requires a complete audit, a rerun generating zero jobs, recovery
+of two disposable missing/corrupt copies, and resource accounting before packaging.
+It uploads a draft release, verifies its asset digests, then publishes and requests
+Veer's and Abdullah's actual consumer acceptance on #29/#30. It stops on error;
+it neither closes these issues nor infers acceptance.
+
+For local live status, use the frozen worktree; the JSON record in this PR is a
+snapshot, not a live counter:
+
+```bash
+cd cache/worktrees/real-pilot-29
+cat artifacts/runs/pilot-2026-10-15/completion-status.json
+tail -n 20 artifacts/runs/pilot-2026-10-15/finish-supervisor.log
+```
+
+Keep this host awake and preserve the execution checkout, inputs and run paths.
+The detached processes survive the terminal session, but do not restart after a
+reboot. If the status is `stopped_on_error`, preserve the reports and investigate
+before restarting; do not launch a second generator or edit scientific settings.
 
 #29 remains open until the full audit, recovery/completed-rerun checks and both
 owner acceptances. #30 remains open until real coverage, actual resource costs
