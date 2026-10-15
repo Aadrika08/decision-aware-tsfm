@@ -24,8 +24,10 @@ new analysis parameters. Their values should be agreed on the issue and
 recorded in docs/decisions/ before the real multi-series run.
 """
 import numpy as np
-from sklearn.isotonic import IsotonicRegression
-from sklearn.model_selection import GroupKFold, KFold
+
+# scikit-learn is imported inside the two functions that use it, so importing
+# this package (and the loader and selector that import from it) does not
+# require scikit-learn to be installed. Only the monotone/flexible fit needs it.
 
 MIN_DISTINCT_OMEGA_THRESHOLD = 3
 MIN_DISTINCT_OMEGA_FLEXIBLE = 8
@@ -124,6 +126,8 @@ def _crossing_interval(x_sorted, fitted):
 
 
 def _cv_mse(x, y, make_predict, groups, n_splits):
+    from sklearn.model_selection import GroupKFold, KFold
+
     splitter = GroupKFold(n_splits) if groups is not None else KFold(
         n_splits, shuffle=True, random_state=0)
     errors = []
@@ -172,6 +176,8 @@ def fit_monotone_boundary(omega, delta, direction="both", datasets=None, groups=
         inc = d == "increasing"
 
         def make(xtr, ytr, inc=inc):
+            from sklearn.isotonic import IsotonicRegression
+
             model = IsotonicRegression(increasing=inc, out_of_bounds="clip").fit(xtr, ytr)
             return model.predict
 
