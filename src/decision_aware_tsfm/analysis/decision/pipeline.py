@@ -231,7 +231,7 @@ def fit_pool(tables) -> pd.DataFrame:
 
 
 def run(tables, representatives, static_threshold, fit_scheme="leave_one_dataset_out",
-        min_fit_datasets=2):
+        min_fit_datasets=3):
     """Run the seven comparators.
 
     fit_scheme decides how D_Omega is fitted:
