@@ -2,8 +2,9 @@
 through decision.k3_adapter.
 
 Synthetic fixture and hand-built tables only. No real cache, no M5 or PJM.
-The classes that call the K3 selector need analysis/k3/selector.py and
-scikit-learn; without them they are skipped and say so."""
+The classes that call the K3 selector need analysis/k3/selector.py (PR #54)
+and analysis/k3/boundary.py (PR #32); without them they are skipped and say
+so. Deferral pricing (pilot decision 8) is tested with and without them."""
 import contextlib
 import copy
 import functools
@@ -25,16 +26,18 @@ import pandas as pd
 import decision_aware_tsfm.analysis.decision as pkg
 from decision_aware_tsfm.analysis.decision import k3_adapter, run_fixture
 from decision_aware_tsfm.analysis.decision.costs import SERIES_KEYS
-from decision_aware_tsfm.analysis.decision.evaluate import run_selectors, summarize
+from decision_aware_tsfm.analysis.decision.evaluate import (
+    CHARGE_COLUMNS, DEFERRAL_PRICING, charge_deferrals, run_selectors, summarize, summarize_charged)
 from decision_aware_tsfm.analysis.decision.fixture import (
     FAMILY_OF_MODEL, FIT_ONLY_DATASETS, FIXTURE_SCHEMA, FIXTURE_STATIC_THRESHOLD as THRESHOLD,
     REPRESENTATIVES)
 from decision_aware_tsfm.analysis.decision.guards import FitEvalOverlapError, HeldOutLeakError
 from decision_aware_tsfm.analysis.decision.k3_adapter import (
-    DEFAULT_COST, DEFAULT_MARGIN, DEFAULT_MIN_DISTINCT, K3_SELECTOR_MODULE, K3SelectorAdapter,
-    K3SelectorUnavailable, reason_of)
+    DEFAULT_COST, DEFAULT_K3_MIN_DISTINCT, DEFAULT_MARGIN, DEFAULT_MIN_FIT_DATASETS, K3_SELECTOR_MODULE,
+    K3SelectorAdapter, K3SelectorUnavailable, build_k3_d_omega, reason_of)
 from decision_aware_tsfm.analysis.decision.metrics import TAU_GRID
-from decision_aware_tsfm.analysis.decision.pipeline import build_tables, fit_pool, run, seven_selectors
+from decision_aware_tsfm.analysis.decision.pipeline import (
+    build_tables, fit_d_omega, fit_pool, run, seven_selectors)
 from decision_aware_tsfm.analysis.decision.schema import UNIT_KEYS, validate_selection_frame
 from decision_aware_tsfm.analysis.decision.selectors import (
     FIT_POOL_COLUMNS, DOmegaLinear, LeaveOneDatasetOut, NotFitted, SelectorInput)
@@ -47,7 +50,7 @@ try:
 except ImportError as e:
     k3 = None
     NO_K3 = (f"K3 selector not importable here ({e}); these tests need "
-             "analysis/k3/selector.py (PR #54, #32) and scikit-learn (PR #33)")
+             "analysis/k3/selector.py (PR #54) and analysis/k3/boundary.py (PR #32)")
 needs_k3 = unittest.skipIf(NO_K3, NO_K3)
 
 EVAL_DATASETS = ("fx_classical_wins", "fx_tau_flip", "fx_tie", "fx_tsfm_wins")
@@ -130,8 +133,12 @@ class WithoutTheK3Module(unittest.TestCase):
 
     def test_missing_k3_module_fails_with_a_clear_message(self):
         with mock.patch.dict(sys.modules, {K3_SELECTOR_MODULE: None}):
-            with self.assertRaisesRegex(K3SelectorUnavailable, "scikit-learn"):
+            with self.assertRaisesRegex(K3SelectorUnavailable, "PR #54"):
                 K3SelectorAdapter.fit(_pool())
+            with self.assertRaisesRegex(K3SelectorUnavailable, "PR #54"):
+                build_k3_d_omega(_shared.tables())
+            res, _ = run(_shared.tables(), REPRESENTATIVES, THRESHOLD)        # the default never needs it
+            pd.testing.assert_frame_equal(res, _shared.results()[0])
             with self.assertRaisesRegex(K3SelectorUnavailable, "analysis/k3/selector.py"):
                 k3_adapter.k3_module()
 
@@ -218,10 +225,11 @@ class HandBuiltPool(unittest.TestCase):
 
     def test_defaults_are_his_defaults_and_are_recorded(self):
         self.assertEqual(DEFAULT_MARGIN, inspect.signature(k3.apply_selector).parameters["margin"].default)
-        self.assertEqual(DEFAULT_MIN_DISTINCT, inspect.signature(k3.fit_selector).parameters["min_distinct"].default)
-        self.assertEqual(DEFAULT_COST, "raw")
+        self.assertEqual(DEFAULT_K3_MIN_DISTINCT,
+                         inspect.signature(k3.fit_selector).parameters["min_distinct"].default)
+        self.assertEqual(DEFAULT_COST, "scaled")                            # pilot decision 9
         desc = self.sel.describe()
-        self.assertEqual((desc["margin"], desc["min_distinct"], desc["cost"]), (0.0, 3, "raw"))
+        self.assertEqual((desc["margin"], desc["k3_min_distinct"], desc["cost"]), (0.0, 3, "scaled"))
         self.assertEqual(desc["fitted_datasets"], ["fa", "fb", "fc"])
         self.assertEqual(sorted(desc["specs"]), ["1"])
         self.assertEqual(desc["specs"]["1"]["spec_version"], k3.SPEC_VERSION)
@@ -235,7 +243,7 @@ class HandBuiltPool(unittest.TestCase):
         self.assertEqual((rules["0.50"]["omega_min"], rules["0.50"]["omega_max"]), (0.125, 0.875))
         self.assertEqual(rules["0.50"]["n_datasets"], 3)
         self.assertEqual(rules["0.50"]["n_series"], 12)              # one row per series at each tau
-        self.assertEqual(rules["0.50"]["training_cost"], 12.0)       # raw cost: every series at cost 1
+        self.assertEqual(rules["0.50"]["training_cost"], 12.0)       # every series at cost 1, scale 1
 
     def test_choices_and_deferrals_on_known_units(self):
         want = [  # omega, family at tau 0.5, family at tau 0.91, reason
@@ -307,13 +315,13 @@ class HandBuiltPool(unittest.TestCase):
         self.assertTrue((out.status == "defer").all())
         self.assertTrue((out.note == "reason=insufficient_data").all())
         self.assertTrue(out.chosen_family.isna().all())
-        # min_distinct is passed through and recorded
-        two = K3SelectorAdapter.fit(_pool(datasets=("fa", "fb")), min_distinct=2)
-        self.assertEqual(two.describe()["min_distinct"], 2)
+        # k3_min_distinct is passed through and recorded
+        two = K3SelectorAdapter.fit(_pool(datasets=("fa", "fb")), k3_min_distinct=2)
+        self.assertEqual(two.describe()["k3_min_distinct"], 2)
         self.assertEqual(_select(two, _keys("ev", [0.1875, 0.8125])).status.tolist(), ["selected"] * 4)
         for bad in (0, 2.5):
-            with self.assertRaisesRegex(ValueError, "min_distinct"):
-                K3SelectorAdapter.fit(_pool(), min_distinct=bad)
+            with self.assertRaisesRegex(ValueError, "k3_min_distinct"):
+                K3SelectorAdapter.fit(_pool(), k3_min_distinct=bad)
 
     def test_undefined_omega_in_the_pool_reaches_him_as_none(self):
         pool = _pool()
@@ -334,8 +342,8 @@ class HandBuiltPool(unittest.TestCase):
         pool = _pool()
         big = (pool.series_id == "fc/s1") & (pool.tau == 0.5)               # omega 0.25
         pool.loc[big, ["J_classical", "J_tsfm", "scale"]] = [2000.0, 1000.0, 1000.0]
-        raw = K3SelectorAdapter.fit(pool)
-        scaled = K3SelectorAdapter.fit(pool, cost="scaled")
+        raw = K3SelectorAdapter.fit(pool, cost="raw")
+        scaled = K3SelectorAdapter.fit(pool)
         self.assertEqual(raw.specs[1]["rules"]["0.50"]["threshold"], 0.1875)
         self.assertEqual(scaled.specs[1]["rules"]["0.50"]["threshold"], 0.5)
         self.assertEqual(raw.specs[1]["rules"]["0.50"]["training_cost"], 1013.0)
@@ -346,6 +354,14 @@ class HandBuiltPool(unittest.TestCase):
         self.assertEqual(_select(scaled, unit).chosen_family.tolist(), ["classical"])
         with self.assertRaisesRegex(ValueError, "cost"):
             K3SelectorAdapter.fit(pool, cost="regret")
+
+    def test_scaled_fit_refuses_a_non_positive_scale(self):
+        for bad in (0.0, -1.0):
+            pool = _pool()
+            pool.loc[pool.index[0], "scale"] = bad
+            with self.assertRaisesRegex(ValueError, "positive scale"):
+                K3SelectorAdapter.fit(pool)
+            K3SelectorAdapter.fit(pool, cost="raw")                          # raw cost does not divide
 
     def test_taus_his_two_decimal_keys_cannot_tell_apart_are_refused(self):
         pool = _pool()
@@ -440,19 +456,22 @@ class DeferralsInTheCommonSchema(unittest.TestCase):
         self.assertEqual(set(res.selector), SEVEN)
         self.assertEqual(set(res[res.status == "defer"].selector), {"d_omega"})
 
-    def test_summary_counts_selected_units_only(self):
+    def test_summary_refuses_deferrals_and_the_charged_summary_counts_selected_units_apart(self):
         res = self._run(seven_selectors(THRESHOLD, self.sel))
-        s = summarize(res, by=("selector",)).set_index("selector")
+        with self.assertRaisesRegex(ValueError, "4 deferred row.*summarize_charged"):
+            summarize(res, by=("selector",))
+        s = summarize_charged(res, by=("selector",)).set_index("selector")
         self.assertEqual((s.loc["d_omega", "n_units"], s.loc["d_omega", "n_selected"]), (8, 4))
+        self.assertEqual((s.loc["d_omega", "n_deferred"], s.loc["d_omega", "deferral_rate"]), (4, 0.5))
         self.assertAlmostEqual(s.loc["d_omega", "mean_scaled_regret"], 0.5, places=12)
         self.assertEqual((s.loc["always_tsfm", "n_units"], s.loc["always_tsfm", "n_selected"]), (8, 8))
 
     def test_summary_of_a_fully_deferred_group_says_nothing_was_selected(self):
         res = self._run(seven_selectors(THRESHOLD, K3SelectorAdapter.fit(_pool(datasets=("fa", "fb")))))
         self.assertTrue((_d_omega(res).status == "defer").all())
-        s = summarize(res, by=("selector",)).set_index("selector")
+        s = summarize_charged(res, by=("selector",)).set_index("selector")
         row = s.loc["d_omega"]
-        self.assertEqual((row.n_units, row.n_selected), (8, 0))
+        self.assertEqual((row.n_units, row.n_selected, row.n_deferred), (8, 0, 8))
         self.assertTrue(np.isnan(row.mean_scaled_regret))
         self.assertTrue(np.isnan(row.frac_oracle_value))
         self.assertEqual(row.frac_note, "undefined: no selected units")
@@ -497,11 +516,18 @@ class InsideTheFoldWrapper(unittest.TestCase):
         with self.assertRaises(HeldOutLeakError):
             LeaveOneDatasetOut.build(pool, ["ev"], fit=K3SelectorAdapter.fit)
 
-    def test_fold_with_two_other_datasets_is_fitted_and_defers_every_unit(self):
-        """The wrapper needs 2 other datasets, his rule needs 3: the fold is built,
-        every rule says insufficient_data, every unit is deferred."""
+    def test_fold_with_two_other_datasets_is_not_fitted_by_default(self):
+        """Engine floor 3 (#61): two other datasets is too few, the fold is not built."""
         pool = self._pool_with_eval(datasets=("fa", "fb"))
         d = LeaveOneDatasetOut.build(pool, ["ev"], fit=K3SelectorAdapter.fit)
+        self.assertIsInstance(d.folds["ev"], NotFitted)
+        self.assertIn("2 other dataset(s) with usable units, need 3", d.folds["ev"].reason)
+
+    def test_fold_with_two_other_datasets_under_an_engine_floor_of_2_meets_his_floor(self):
+        """Engine floor lowered to 2, his floor still 3: the fold is built,
+        every rule says insufficient_data, every unit is deferred."""
+        pool = self._pool_with_eval(datasets=("fa", "fb"))
+        d = LeaveOneDatasetOut.build(pool, ["ev"], fit=K3SelectorAdapter.fit, min_fit_datasets=2)
         self.assertIsInstance(d.folds["ev"], K3SelectorAdapter)
         units = pool.loc[pool.dataset == "ev", UNIT_KEYS + ["omega"]]
         out = d.select(SelectorInput(units=units, val=units))
@@ -554,8 +580,9 @@ class OnTheFixtureThroughRun(unittest.TestCase):
             for h in sorted(units.horizon.unique()):
                 p = pool[(pool.dataset != ds) & (pool.horizon == h)]
                 self.assertNotIn(ds, set(p.dataset))
-                spec = k3.fit_selector(p.omega.tolist(), p.tau.to_numpy(), p.J_classical.to_numpy(),
-                                       p.J_tsfm.to_numpy(), p.dataset.to_numpy(dtype=object))
+                spec = k3.fit_selector(p.omega.tolist(), p.tau.to_numpy(),
+                                       p.J_classical.to_numpy() / p.scale.to_numpy(),
+                                       p.J_tsfm.to_numpy() / p.scale.to_numpy(), p.dataset.to_numpy(dtype=object))
                 self.assertEqual(self.d.folds[ds].specs[int(h)], spec, (ds, h))
                 for u in units[(units.dataset == ds) & (units.horizon == h)].itertuples():
                     choice, reason = k3.apply_selector(spec, None if np.isnan(u.omega) else u.omega, u.tau)
@@ -591,22 +618,23 @@ class OnTheFixtureThroughRun(unittest.TestCase):
         self.assertEqual(json.loads(json.dumps(desc)), desc)
         self.assertEqual(sorted(desc["folds"]), list(EVAL_DATASETS))
         for fold in desc["folds"].values():
-            self.assertEqual((fold["selector"], fold["margin"], fold["min_distinct"], fold["cost"]),
-                             ("k3_omega_tau", 0.0, 3, "raw"))
+            self.assertEqual((fold["selector"], fold["margin"], fold["k3_min_distinct"], fold["cost"]),
+                             ("k3_omega_tau", 0.0, 3, "scaled"))
+        self.assertEqual(desc["min_fit_datasets"], 3)                       # the engine's floor, named apart
 
     def test_does_not_use_hindsight(self):
         self.assertFalse(K3SelectorAdapter.needs_hindsight)
         self.assertFalse(self.d.needs_hindsight)
 
     def test_settings_reach_the_selector_through_run(self):
-        fit = functools.partial(K3SelectorAdapter.fit, margin=0.05, min_distinct=4, cost="scaled")
+        fit = functools.partial(K3SelectorAdapter.fit, margin=0.05, k3_min_distinct=4, cost="raw")
         res, d = run(self.tables, REPRESENTATIVES, THRESHOLD, d_omega_fit=fit)
         validate_selection_frame(res)
         for fold in d.describe()["folds"].values():
-            self.assertEqual((fold["margin"], fold["min_distinct"], fold["cost"]), (0.05, 4, "scaled"))
+            self.assertEqual((fold["margin"], fold["k3_min_distinct"], fold["cost"]), (0.05, 4, "raw"))
 
     def test_min_distinct_above_the_fold_size_defers_everything(self):
-        fit = functools.partial(K3SelectorAdapter.fit, min_distinct=5)      # each fold has 4 other datasets
+        fit = functools.partial(K3SelectorAdapter.fit, k3_min_distinct=5)  # each fold has 4 other datasets
         res, _ = run(self.tables, REPRESENTATIVES, THRESHOLD, d_omega_fit=fit)
         validate_selection_frame(res)
         d = _d_omega(res)
@@ -623,11 +651,17 @@ class OnTheFixtureThroughRun(unittest.TestCase):
         dm = _d_omega(res)
         self.assertTrue((dm.status == "defer").all())
         self.assertEqual(dm.note.unique().tolist(), ["reason=insufficient_data"])
-        s = summarize(res, by=("selector", "dataset"))
+        s = summarize_charged(res, by=("selector", "dataset"))
         mine = s[s.selector == "d_omega"]
         self.assertTrue((mine.n_selected == 0).all())
         self.assertTrue(mine.mean_scaled_regret.isna().all())
         self.assertTrue(mine.frac_oracle_value.isna().all())
+        # every deferral is charged pinball_validation's cost, so the charged numbers are those of pinball_validation
+        pv = s[s.selector == "pinball_validation"].set_index("dataset")
+        mine = mine.set_index("dataset")
+        self.assertTrue((mine.deferral_rate == 1.0).all())
+        self.assertTrue((mine.n_not_charged == 0).all())
+        pd.testing.assert_series_equal(mine.mean_scaled_regret_charged, pv.mean_scaled_regret, check_names=False)
 
     def test_undefined_omega_is_a_deferral_with_its_reason(self):
         om = _shared.fixture_data()[1].copy()
@@ -670,7 +704,7 @@ class PartlyDeferredOnTheFixture(unittest.TestCase):
 
     def test_summary_and_regret_use_the_selected_units_only(self):
         d = _d_omega(self.res)
-        s = summarize(self.res, by=("selector", "dataset"))
+        s = summarize_charged(self.res, by=("selector", "dataset"))
         s = s[s.selector == "d_omega"].set_index("dataset")
         n = 2 * len(TAU_GRID)
         self.assertEqual((s.loc["fx_tsfm_wins", "n_units"], s.loc["fx_tsfm_wins", "n_selected"]), (6 * n, n))
@@ -695,14 +729,20 @@ class RunFixtureCommandWithTheK3Selector(unittest.TestCase):
             res = pd.read_parquet(Path(tmp) / "selection_results.parquet")
             summary = pd.read_csv(Path(tmp) / "summary_by_dataset.csv", encoding="utf-8")
             folds = json.loads((Path(tmp) / "d_omega_folds.json").read_text(encoding="utf-8"))
+            self.charged = pd.read_parquet(Path(tmp) / "selection_charged.parquet")
+            self.per_tau = pd.read_csv(Path(tmp) / "summary_by_horizon_tau.csv", encoding="utf-8")
         return buf.getvalue(), files, res, summary, folds
 
     def test_writes_the_frozen_folds_and_matches_run(self):
         out, files, res, summary, folds = self._main()
         self.assertEqual(files, ["d_omega_folds.json", "fixture_cache.parquet", "fixture_omega.csv",
-                                 "planted_answers.csv", "selection_results.parquet", "summary_by_dataset.csv"])
+                                 "planted_answers.csv", "selection_charged.parquet", "selection_results.parquet",
+                                 "summary_by_dataset.csv", "summary_by_horizon_tau.csv"])
         pd.testing.assert_frame_equal(res, _k3_results()[0])
         self.assertEqual(folds, _k3_results()[1].describe())
+        pd.testing.assert_frame_equal(self.charged, charge_deferrals(res))
+        self.assertEqual(len(self.per_tau), 7 * 2 * len(TAU_GRID))           # one row per selector, horizon and tau
+        self.assertTrue((self.per_tau.deferral_pricing == DEFERRAL_PRICING).all())
         self.assertIn("D_Omega K3 Omega-plus-tau selector", out)
         self.assertNotIn("D_Omega placeholder", out)
 
@@ -717,7 +757,9 @@ class RunFixtureCommandWithTheK3Selector(unittest.TestCase):
         self.assertTrue((mine.n_selected == 0).all())
         self.assertTrue(mine.mean_scaled_regret.isna().all())
         self.assertTrue((mine.frac_note == "undefined: no selected units").all())
-        self.assertTrue(all(f["min_distinct"] == 5 for f in folds["folds"].values()))
+        self.assertTrue((mine.deferral_rate == 1.0).all())                  # not dropped: every unit charged
+        self.assertTrue(mine.mean_scaled_regret_charged.notna().all())
+        self.assertTrue(all(f["k3_min_distinct"] == 5 for f in folds["folds"].values()))
 
     def test_some_units_deferred_still_reports(self):
         out, _, res, _, folds = self._main("--k3-margin", "0.2")
@@ -729,6 +771,395 @@ class RunFixtureCommandWithTheK3Selector(unittest.TestCase):
         self.assertIn("weak_evidence", out)
         self.assertTrue(all(f["margin"] == 0.2 for f in folds["folds"].values()))
 
+
+
+# --------------------------------------------------------------------------- pilot decisions 6, 8, 9 (#29)
+
+def _src_path():
+    src = str(Path(pkg.__file__).parents[2])
+    return os.pathsep.join([src, os.environ.get("PYTHONPATH", "")]).rstrip(os.pathsep)
+
+
+class _DeferSeries:
+    """Stub D_Omega: classical everywhere, defer on the named series. Lets the
+    pricing be tested where the K3 module is not importable."""
+    name, needs_hindsight = "d_omega", False
+
+    def __init__(self, defer):
+        self.defer = set(defer)
+
+    def select(self, inp):
+        d = inp.units[UNIT_KEYS].copy()
+        mask = d.series_id.isin(self.defer).to_numpy()
+        d["chosen_family"] = np.where(mask, None, "classical").astype(object)
+        d["status"] = np.where(mask, "defer", "selected")
+        d["note"] = np.where(mask, "reason=stub", "")
+        return d
+
+
+def _pricing_tables(val_unknown_s3=True):
+    """Four series, taus 0.5 and 0.91. Test: classical 1, TSFM 3, scale 2, so the
+    oracle is classical at cost 1. Validation makes pinball_validation choose
+    TSFM (wrongly) on s0 and s1, classical on s2, and nothing on s3 (no
+    validation costs) unless val_unknown_s3 is False (then classical)."""
+    units = _keys("ev", [0.2, 0.4, 0.6, 0.8])
+    keys = units[UNIT_KEYS]
+    s = keys.series_id.str[-1].astype(int)
+    vc = np.where(s <= 1, 1.0, 0.5)
+    vt = np.where(s <= 1, 0.5, 1.0)
+    if val_unknown_s3:
+        vc, vt = np.where(s == 3, np.nan, vc), np.where(s == 3, np.nan, vt)
+    return dict(units=units,
+                val=keys.assign(J_classical=vc, J_tsfm=vt, crps_classical=vc, crps_tsfm=vt),
+                test=keys.assign(J_classical=1.0, J_tsfm=3.0, scale=2.0, n_origins=4),
+                n_val=keys[SERIES_KEYS].drop_duplicates().assign(n_validation_origins=2))
+
+
+def _run_seven(t, d_omega):
+    return run_selectors(seven_selectors(THRESHOLD, d_omega), t["units"], t["val"], t["test"],
+                         REPRESENTATIVES, t["n_val"])
+
+
+class DeferralsArePricedAtPinballValidation(unittest.TestCase):
+    """Pilot decision 8. Runs in every environment (a stub defers)."""
+
+    def setUp(self):
+        self.t = _pricing_tables()
+        self.res = _run_seven(self.t, _DeferSeries({"ev/s0", "ev/s2", "ev/s3"}))
+        self.c = charge_deferrals(self.res)
+
+    def test_a_deferred_unit_is_charged_pinball_validations_cost_for_the_same_unit(self):
+        mine = self.c[self.c.selector == "d_omega"].set_index(UNIT_KEYS)
+        pv = self.res[self.res.selector == "pinball_validation"].set_index(UNIT_KEYS)
+        for key, r in mine.iterrows():
+            with self.subTest(unit=key):
+                if r.status == "selected":
+                    self.assertFalse(r.deferred)
+                    self.assertEqual(r.charged_cost, r.realized_cost)
+                    self.assertIsNone(r.deferral_family)
+                    self.assertTrue(np.isnan(r.deferral_cost))
+                elif pv.loc[key, "status"] == "selected":
+                    self.assertTrue(r.deferred)
+                    self.assertEqual(r.deferral_family, pv.loc[key, "chosen_family"])
+                    self.assertEqual(r.deferral_cost, pv.loc[key, "realized_cost"])
+                    self.assertEqual(r.charged_cost, pv.loc[key, "realized_cost"])
+                    self.assertEqual(r.charge_note, "deferral charged at pinball_validation")
+        s0 = mine.xs("ev/s0", level="series_id")
+        self.assertEqual(s0.deferral_family.tolist(), ["tsfm", "tsfm"])          # validation's (wrong) choice
+        self.assertEqual(s0.charged_cost.tolist(), [3.0, 3.0])                   # its test cost, not the oracle's 1
+        self.assertEqual(s0.charged_regret.tolist(), [2.0, 2.0])
+        self.assertEqual(s0.charged_scaled_regret.tolist(), [1.0, 1.0])
+        s2 = mine.xs("ev/s2", level="series_id")
+        self.assertEqual((s2.deferral_family.tolist(), s2.charged_cost.tolist()), (["classical"] * 2, [1.0, 1.0]))
+
+    def test_deferred_units_are_never_dropped(self):
+        self.assertEqual(len(self.c), len(self.res))
+        pd.testing.assert_frame_equal(self.c[list(self.res.columns)], self.res.reset_index(drop=True))
+        self.assertEqual(list(self.c.columns), list(self.res.columns) + list(CHARGE_COLUMNS))
+        mine = self.c[self.c.selector == "d_omega"]
+        self.assertEqual(int(mine.deferred.sum()), 6)
+        self.assertTrue((mine.deferred == (mine.status == "defer")).all())
+        s = summarize_charged(self.res).set_index(["selector", "horizon", "tau"])
+        for tau in (0.5, 0.91):
+            row = s.loc[("d_omega", 1, tau)]
+            self.assertEqual((row.n_units, row.n_selected, row.n_deferred, row.n_not_charged), (4, 1, 3, 1))
+            self.assertEqual(row.deferral_rate, 0.75)
+
+    def test_an_unpriceable_deferral_is_flagged_and_the_group_is_not_reported_as_complete(self):
+        mine = self.c[self.c.selector == "d_omega"]
+        s3 = mine[mine.series_id == "ev/s3"]
+        self.assertTrue(s3.deferred.all())
+        self.assertTrue(s3.charged_cost.isna().all())
+        self.assertTrue(s3.deferral_family.isna().all())
+        self.assertTrue((s3.charge_note == "deferral unpriced: pinball_validation made no choice for this unit").all())
+        row = summarize_charged(self.res).set_index(["selector", "horizon", "tau"]).loc[("d_omega", 1, 0.5)]
+        for col in ("mean_scaled_cost_charged", "mean_scaled_regret_charged", "frac_oracle_value_charged"):
+            self.assertTrue(np.isnan(row[col]), col)
+        self.assertEqual(row.frac_note_charged, "undefined: 1 unit(s) not charged")
+
+    def test_charged_numbers_by_hand_when_every_deferral_is_priced(self):
+        t = _pricing_tables(val_unknown_s3=False)
+        res = _run_seven(t, _DeferSeries({"ev/s0", "ev/s2", "ev/s3"}))
+        row = summarize_charged(res).set_index(["selector", "horizon", "tau"]).loc[("d_omega", 1, 0.5)]
+        # charged: s0 3 (tsfm), s1 1 (selected classical), s2 1, s3 1; scale 2; oracle 1 everywhere
+        self.assertEqual(row.n_not_charged, 0)
+        self.assertAlmostEqual(row.mean_scaled_cost_charged, (3 + 1 + 1 + 1) / 2 / 4, places=15)
+        self.assertAlmostEqual(row.mean_scaled_regret_charged, (2 / 2) / 4, places=15)
+        self.assertEqual(row.mean_scaled_regret, 0.0)                         # the decided unit alone
+        self.assertTrue(np.isnan(row.frac_oracle_value_charged))             # classical is best-fixed and oracle
+        self.assertEqual(row.frac_note_charged, "undefined: best-fixed equals oracle")
+        self.assertEqual(row.deferral_pricing, DEFERRAL_PRICING)
+
+    def test_summarize_refuses_a_frame_with_deferrals(self):
+        with self.assertRaisesRegex(ValueError, "6 deferred row.*summarize_charged"):
+            summarize(self.res)
+
+    def test_without_deferrals_the_charged_summary_adds_columns_and_changes_nothing(self):
+        base = _shared.results()[0]
+        plain = summarize(base)
+        charged = summarize_charged(base)
+        pd.testing.assert_frame_equal(charged[list(plain.columns)], plain)
+        self.assertTrue((charged.n_deferred == 0).all())
+        self.assertTrue((charged.deferral_rate == 0).all())
+        np.testing.assert_allclose(charged.mean_scaled_regret_charged, charged.mean_scaled_regret, rtol=0, atol=1e-15)
+        ok = plain.frac_oracle_value.notna()
+        np.testing.assert_allclose(charged.frac_oracle_value_charged[ok], plain.frac_oracle_value[ok], rtol=1e-12)
+        orc = charged[charged.selector == "hindsight_oracle"]
+        self.assertTrue((orc.mean_scaled_regret_charged == 0).all())
+
+
+class OraclePricingCannotBeProducedSilently(unittest.TestCase):
+    """Pilot decision 8: the oracle price is an upper bound and is never what the engine charges."""
+
+    def test_there_is_no_option_to_choose_the_price(self):
+        self.assertEqual(list(inspect.signature(charge_deferrals).parameters), ["res"])
+        self.assertEqual(list(inspect.signature(summarize_charged).parameters), ["res", "by"])
+        self.assertNotIn("deferral", " ".join(inspect.signature(build_k3_d_omega).parameters))
+        self.assertEqual(DEFERRAL_PRICING, "validation_comparator")
+
+    def test_without_pinball_validation_rows_there_is_no_fallback(self):
+        t = _pricing_tables(val_unknown_s3=False)
+        res = run_selectors([_DeferSeries({"ev/s0"})], t["units"], t["val"], t["test"], REPRESENTATIVES, t["n_val"])
+        with self.assertRaisesRegex(ValueError, "never at the oracle"):
+            charge_deferrals(res)
+        with self.assertRaisesRegex(ValueError, "never at the oracle"):
+            summarize_charged(res)
+
+    def test_a_deferred_row_that_already_carries_a_cost_is_refused(self):
+        """A frame whose deferrals were priced upstream (for example at the oracle) is not schema-valid."""
+        res = _run_seven(_pricing_tables(val_unknown_s3=False), _DeferSeries({"ev/s0"}))
+        bad = res.copy()
+        d = bad.status == "defer"
+        bad.loc[d, "realized_cost"] = bad.loc[d, "oracle_cost"]
+        with self.assertRaisesRegex(ValueError, "must not carry a family or a cost"):
+            charge_deferrals(bad)
+
+    def test_the_charge_is_not_the_oracle_cost_and_every_row_names_its_pricing(self):
+        t = _pricing_tables(val_unknown_s3=False)
+        c = charge_deferrals(_run_seven(t, _DeferSeries({"ev/s0", "ev/s1"})))
+        d = c[c.deferred]
+        self.assertTrue((d.charged_cost > d.oracle_cost).all())               # validation chose wrongly here
+        self.assertTrue((c.deferral_pricing == "validation_comparator").all())
+        self.assertFalse((c.deferral_pricing == "oracle_upper_bound").any())
+
+
+@needs_k3
+class AgreesWithHisEvaluationOneTauAtATime(unittest.TestCase):
+    """Pilot decisions 8 and 9: per (horizon, tau), the engine's charged numbers
+    equal his evaluate_selector given scaled costs and deferral_cost from
+    pinball_validation; and differ from his oracle-priced upper bound."""
+
+    def setUp(self):
+        omegas = [0.1875, 0.3125, 0.4375, 0.5625, 0.6875, 0.8125]
+        units = _keys("ev", omegas)
+        keys = units[UNIT_KEYS]
+        i = keys.series_id.str[-1].astype(int).to_numpy()
+        below = units.omega.to_numpy() <= 0.5
+        classical_cheaper = np.where(units.tau.to_numpy() == 0.5, below, ~below)
+        scale = 1.0 + i
+        jc = np.where(classical_cheaper, 1.0, 2.0 + 0.25 * i) * scale
+        jt = np.where(classical_cheaper, 2.0 + 0.5 * i, 1.0) * scale
+        jt[(i == 0) & (units.tau.to_numpy() == 0.91)] = 0.5                # best-fixed is not the oracle
+        vwrong = (i == 1) | (i == 3)                                          # validation picks wrongly on s1, s3
+        vc = np.where(classical_cheaper ^ vwrong, 0.5, 1.0)
+        vt = np.where(classical_cheaper ^ vwrong, 1.0, 0.5)
+        self.t = dict(units=units,
+                      val=keys.assign(J_classical=vc, J_tsfm=vt, crps_classical=vc, crps_tsfm=vt),
+                      test=keys.assign(J_classical=jc, J_tsfm=jt, scale=scale, n_origins=4),
+                      n_val=keys[SERIES_KEYS].drop_duplicates().assign(n_validation_origins=2))
+        self.sel = K3SelectorAdapter.fit(_pool(), margin=0.2)
+        self.res = _run_seven(self.t, self.sel)
+
+    def test_each_tau_matches_his_evaluate_selector_with_the_validation_price(self):
+        s = summarize_charged(self.res).set_index(["selector", "horizon", "tau"])
+        c = charge_deferrals(self.res)
+        pv = c[c.selector == "pinball_validation"].set_index(UNIT_KEYS)
+        test = self.t["test"].set_index(UNIT_KEYS)
+        n_def = 0
+        for tau in (0.5, 0.91):
+            with self.subTest(tau=tau):
+                u = self.t["units"][self.t["units"].tau == tau]
+                k = [tuple(r) for r in u[UNIT_KEYS].itertuples(index=False)]
+                sc = test.loc[k, "scale"].to_numpy()
+                jc, jt = test.loc[k, "J_classical"].to_numpy() / sc, test.loc[k, "J_tsfm"].to_numpy() / sc
+                price = pv.loc[k, "realized_cost"].to_numpy() / sc
+                his = k3.evaluate_selector(self.sel.specs[1], u.omega.tolist(), u.tau.to_numpy(), jc, jt,
+                                           u.dataset.to_numpy(dtype=object), margin=0.2, deferral_cost=price)
+                row = s.loc[("d_omega", 1, tau)]
+                self.assertEqual(his["deferral_pricing"], DEFERRAL_PRICING)
+                self.assertEqual((his["deferrals"], his["deferral_rate"]), (row.n_deferred, row.deferral_rate))
+                self.assertAlmostEqual(his["realized_cost"] / his["n"], row.mean_scaled_cost_charged, places=12)
+                self.assertGreater(his["best_fixed_cost"], his["oracle_cost"])
+                self.assertAlmostEqual(his["fraction_of_oracle_value_captured"], row.frac_oracle_value_charged,
+                                       places=12)
+                bound = k3.evaluate_selector(self.sel.specs[1], u.omega.tolist(), u.tau.to_numpy(), jc, jt,
+                                             u.dataset.to_numpy(dtype=object), margin=0.2)
+                self.assertEqual(bound["deferral_pricing"], "oracle_upper_bound")
+                self.assertLess(bound["realized_cost"], his["realized_cost"])  # the bound flatters a deferral
+                n_def += his["deferrals"]
+        self.assertGreater(n_def, 0)
+
+    def test_per_tau_numbers_differ_from_one_pooled_over_taus(self):
+        by_tau = summarize_charged(self.res).set_index(["selector", "horizon", "tau"])
+        pooled = summarize_charged(self.res, by=("selector", "horizon")).set_index(["selector", "horizon"])
+        fr = [by_tau.loc[("d_omega", 1, t), "frac_oracle_value_charged"] for t in (0.5, 0.91)]
+        self.assertNotAlmostEqual(fr[0], fr[1], places=6)
+        self.assertEqual(len(by_tau.loc["d_omega"]), 2)
+        self.assertEqual(pooled.loc[("d_omega", 1), "n_units"], 12)
+
+
+@needs_k3
+class FittedOnScaledCost(unittest.TestCase):
+    """Pilot decision 9: one dataset with costs 1000 times larger must not move the fit."""
+
+    def _pools(self):
+        agree = _pool(datasets=("fa", "fb", "fc"))
+        against = _pool(datasets=("fd",)).rename(columns={"J_classical": "J_tsfm", "J_tsfm": "J_classical"})
+        big = against.copy()
+        big[["J_classical", "J_tsfm", "scale"]] *= 1000.0
+        return (pd.concat([agree, against], ignore_index=True)[FIT_POOL_COLUMNS],
+                pd.concat([agree, big], ignore_index=True)[FIT_POOL_COLUMNS])
+
+    def test_a_dataset_1000_times_larger_does_not_flip_the_scaled_fit(self):
+        same, large = self._pools()
+        ref = K3SelectorAdapter.fit(same)
+        scaled = K3SelectorAdapter.fit(large)                                 # the default
+        self.assertEqual(scaled.cost, "scaled")
+        self.assertEqual(scaled.specs, ref.specs)
+        self.assertEqual(ref.specs[1]["rules"]["0.50"]["orientation"], "classical_below")    # three datasets to one
+        raw = K3SelectorAdapter.fit(large, cost="raw")
+        self.assertEqual(raw.specs[1]["rules"]["0.50"]["orientation"], "tsfm_below")        # fd alone decides
+        unit = _keys("ev", [0.25], taus=(0.5,))
+        self.assertEqual(_select(scaled, unit).chosen_family.tolist(), ["classical"])
+        self.assertEqual(_select(raw, unit).chosen_family.tolist(), ["tsfm"])
+
+    def test_through_the_entry_point_on_the_fixture(self):
+        tables = dict(_shared.tables())
+        fu = tables["fit_units"].copy()
+        fu[["J_classical", "J_tsfm", "scale"]] *= 1000.0
+        big = dict(tables, fit_units=fu)
+
+        def rules(d):
+            return {(ds, h, k): (r["status"], r.get("orientation"), r.get("threshold"))
+                    for ds, f in d.folds.items() for h, sp in f.specs.items() for k, r in sp["rules"].items()}
+
+        self.assertEqual(rules(build_k3_d_omega(big)), rules(build_k3_d_omega(tables)))
+        self.assertNotEqual(rules(build_k3_d_omega(big, cost="raw")), rules(build_k3_d_omega(tables, cost="raw")))
+
+
+class TwoFloorsNamedApart(unittest.TestCase):
+    """Pilot decision 6 and #61: the engine floor counts datasets, default 3; his floor is separate."""
+
+    def test_every_engine_floor_default_is_3(self):
+        self.assertEqual(DEFAULT_MIN_FIT_DATASETS, 3)
+        for f in (LeaveOneDatasetOut.build, run, fit_d_omega, build_k3_d_omega):
+            with self.subTest(f=f.__qualname__):
+                self.assertEqual(inspect.signature(f).parameters["min_fit_datasets"].default, 3)
+        self.assertEqual(inspect.signature(build_k3_d_omega).parameters["k3_min_distinct"].default, 3)
+        self.assertEqual(inspect.signature(K3SelectorAdapter.fit).parameters["k3_min_distinct"].default, 3)
+        self.assertNotIn("min_distinct", inspect.signature(K3SelectorAdapter.fit).parameters)
+
+    def test_entry_point_refuses_a_floor_that_is_not_a_whole_number(self):
+        for bad in (0, 2.5):
+            with self.assertRaisesRegex(ValueError, "min_fit_datasets"):
+                build_k3_d_omega(_shared.tables(), min_fit_datasets=bad)
+        with self.assertRaisesRegex(ValueError, "fit_scheme"):
+            build_k3_d_omega(_shared.tables(), fit_scheme="pooled")
+
+    @needs_k3
+    def test_entry_point_applies_the_engine_floor_then_his(self):
+        ev = _keys("ev", [0.1875, 0.8125])
+        t = _eval_tables(ev)
+        t["fit_units"] = _pool(datasets=("fa", "fb"))
+        d = build_k3_d_omega(t)
+        self.assertIsInstance(d.folds["ev"], NotFitted)                      # engine floor: 2 < 3 datasets
+        self.assertEqual(d.describe()["min_fit_datasets"], 3)
+        d2 = build_k3_d_omega(t, min_fit_datasets=2)
+        self.assertIsInstance(d2.folds["ev"], K3SelectorAdapter)
+        out = d2.select(SelectorInput(units=ev, val=t["val"]))
+        self.assertTrue((out.note == "fold=ev reason=insufficient_data").all())  # his floor: 2 < 3
+        self.assertEqual(d2.describe()["folds"]["ev"]["k3_min_distinct"], 3)
+        self.assertIn("datasets", d2.describe()["folds"]["ev"]["k3_min_distinct_counts"])
+
+    @needs_k3
+    def test_his_floor_counts_datasets_not_omega_values(self):
+        """What the adapter's description says: 3 datasets sharing 2 Omega values pass his floor."""
+        sel = K3SelectorAdapter.fit(_pool(datasets=("fa", "fb", "fc"), omegas=(0.25, 0.75)))
+        rule = sel.specs[1]["rules"]["0.50"]
+        self.assertEqual((rule["status"], rule["n_datasets"]), ("ok", 3))
+        one = K3SelectorAdapter.fit(_pool(datasets=("fa", "fb", "fc"), omegas=(0.25,)))
+        self.assertEqual(one.specs[1]["rules"]["0.50"]["status"], "insufficient_data")   # 1 Omega value
+
+
+class EntryPointGuards(unittest.TestCase):
+    def test_held_out_evaluation_units_are_refused_before_the_k3_import(self):
+        for column, name in (("dataset", "PJM"), ("dataset", "m5_daily"), ("config", "M5/D")):
+            with self.subTest(column=column, name=name):
+                t = dict(_shared.tables())
+                u = t["units"].copy()
+                u.loc[u.index[:3], column] = name
+                with mock.patch.dict(sys.modules, {K3_SELECTOR_MODULE: None}):
+                    with self.assertRaises(HeldOutLeakError):
+                        build_k3_d_omega(dict(t, units=u))
+
+    def test_requesting_k3_without_the_module_fails_even_when_no_fold_would_be_fitted(self):
+        ev = _keys("ev", [0.1875, 0.8125])
+        t = dict(_eval_tables(ev), fit_units=_pool(datasets=("fa",)))       # 1 other dataset: no fold is fitted
+        with mock.patch.dict(sys.modules, {K3_SELECTOR_MODULE: None}):
+            with self.assertRaises(K3SelectorUnavailable):
+                build_k3_d_omega(t)
+            d = fit_d_omega(t)                                               # the placeholder path is unaffected
+        self.assertIsInstance(d.folds["ev"], NotFitted)
+
+    @needs_k3
+    def test_held_out_fit_units_are_refused(self):
+        t = dict(_shared.tables())
+        fu = t["fit_units"].copy()
+        fu["dataset"] = "PJM_hourly"
+        with self.assertRaises(HeldOutLeakError):
+            build_k3_d_omega(dict(t, fit_units=fu))
+
+    @needs_k3
+    def test_entry_point_equals_run_with_the_same_fit(self):
+        d = build_k3_d_omega(_shared.tables())
+        res = _run_seven(_shared.tables(), d)
+        pd.testing.assert_frame_equal(res, _k3_results()[0])
+        self.assertEqual(d.describe(), _k3_results()[1].describe())
+        _, d_old = run(_shared.tables(), REPRESENTATIVES, THRESHOLD, fit_scheme="fit_only_datasets",
+                       d_omega_fit=K3SelectorAdapter.fit)
+        d_new = build_k3_d_omega(_shared.tables(), fit_scheme="fit_only_datasets")
+        self.assertEqual(d_new.describe(), d_old.describe())
+
+
+class WithoutScikitLearnOrTheK3Module(unittest.TestCase):
+    def _cli(self, block, tmp):
+        code = ("import sys\n"
+                f"for m in {block!r}: sys.modules[m] = None\n"
+                f"sys.argv = ['run_fixture', '--out', {tmp!r}, '--d-omega', 'k3_selector']\n"
+                "from decision_aware_tsfm.analysis.decision import run_fixture\n"
+                "run_fixture.main()\n"
+                "print('sklearn loaded:', any(m.split('.')[0] == 'sklearn' and sys.modules[m] is not None\n"
+                "                             for m in list(sys.modules)))\n")
+        return subprocess.run([sys.executable, "-c", code], capture_output=True, text=True,
+                              env={**os.environ, "PYTHONPATH": _src_path()})
+
+    def test_k3_option_without_the_k3_module_stops_with_a_clear_error_and_writes_nothing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = self._cli([K3_SELECTOR_MODULE], str(Path(tmp) / "run"))
+            self.assertEqual(out.returncode, 2, out.stderr)
+            self.assertIn("cannot import decision_aware_tsfm.analysis.k3.selector", out.stderr)
+            self.assertIn("PR #54", out.stderr)
+            self.assertNotIn("Traceback", out.stderr)
+            self.assertFalse((Path(tmp) / "run").exists())
+
+    @needs_k3
+    def test_k3_option_runs_with_scikit_learn_blocked(self):
+        """#32 imports scikit-learn inside the functions that need it; the selector needs none of them."""
+        with tempfile.TemporaryDirectory() as tmp:
+            out = self._cli(["sklearn"], str(Path(tmp) / "run"))
+            self.assertEqual(out.returncode, 0, out.stderr)
+            self.assertIn("sklearn loaded: False", out.stdout)
+            self.assertTrue((Path(tmp) / "run" / "summary_by_horizon_tau.csv").exists())
 
 if __name__ == "__main__":
     unittest.main()
