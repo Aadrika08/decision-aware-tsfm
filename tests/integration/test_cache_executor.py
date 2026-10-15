@@ -36,14 +36,14 @@ class ExecutorTest(unittest.TestCase):
         executor._ADAPTERS.clear()
         shutil.rmtree(self.root)
 
-    def make_plan(self, rows=1, models=1, prediction=7.5):
+    def make_plan(self, rows=1, models=1, prediction=7.5, *, naming=None, config="hourly"):
         digest = hashlib.sha256(self.source.read_bytes()).hexdigest()
         workload_rows = []
         for index in range(rows):
             origin = 1000 + index
             workload_rows.append(dict(
                 source_revision="fixture-v1", source_sha256=digest,
-                source_path=self.source.name, dataset="synthetic_fixture", config="hourly",
+                source_path=self.source.name, dataset="synthetic_fixture", config=config,
                 series_id="series-0", item_id="item-0", channel=0, frequency="H",
                 start_timestamp="2020-01-01T00:00:00", source_length=1100,
                 usable_start=0, usable_end=1100, context_start=index,
@@ -58,7 +58,35 @@ class ExecutorTest(unittest.TestCase):
                                    settings={"prediction": prediction + index}))
         workload = dict(schema_version=1, split="development", fixture=True,
                         quantiles=list(TAUS), rows=workload_rows)
+        workload.update(naming or {})
         return plan(workload, {"schema_version": 1, "models": model_rows}, base_dir=self.root)
+
+    def test_named_empty_config_roundtrip_and_mixed_plan_rejected(self):
+        naming = dict(naming_scheme="dataset-config-v1", source_repository="invented/fixture")
+        planned = self.make_plan(naming=naming, config="")
+        self.assertEqual(generate(planned, self.cache)["status"], "complete")
+        job = planned["jobs"][0]
+        table = read_job(self.cache, job)
+        self.assertEqual(table.schema.names, list(executor.SCHEMA.names))
+        self.assertEqual(json.loads(table.schema.metadata[b"job"])["source_repository"],
+                         "invented/fixture")
+        self.assertEqual(audit(planned, self.cache)["status"], "complete")
+        legacy = self.make_plan()["jobs"][0]
+        mixed = dict(planned, jobs=[job, legacy], planned_jobs=2, planned_rows=4)
+        with self.assertRaisesRegex(ValueError, "mixes naming"):
+            audit(mixed, self.cache)
+        heldout = dict(job, source_repository="example/M5")
+        with self.assertRaisesRegex(ValueError, "held out"):
+            load_source(heldout)
+
+    def test_recombined_serialized_plan_rejects_conflicting_stable_id(self):
+        planned = self.make_plan(rows=2)
+        changed = dict(planned["jobs"][1], item_id="another-item")
+        changed["job_id"] = hashlib.sha256(executor._canonical(
+            executor.job_identity(changed)).encode()).hexdigest()
+        recombined = dict(planned, jobs=[planned["jobs"][0], changed])
+        with self.assertRaisesRegex(ValueError, "stable series ID"):
+            audit(recombined, self.cache)
 
     def test_planted_roundtrip_and_complete_resume_do_not_load(self):
         planned = self.make_plan(models=2)

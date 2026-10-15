@@ -43,6 +43,11 @@ def attach_omega(decisions: pd.DataFrame, omega: pd.DataFrame, omega_col: str,
     the omega table is still an error: a missing join is a pipeline fault, not
     an undefined statistic.
 
+    The reason for an undefined value may be supplied in a column named
+    <omega_col>_status (omega_status in a handoff sidecar, omega_levels_status
+    in the frozen manifest). It is carried through as omega_status so the
+    deferral can be reported with its reason; it is not validated here.
+
     Omega exactly 0.0 is refused unless allow_zero_omega is set: the team's
     compute_omega returns 0.0 for degenerate input, which cannot be told apart
     from a real, very low Omega and would make a threshold rule choose
@@ -65,7 +70,9 @@ def attach_omega(decisions: pd.DataFrame, omega: pd.DataFrame, omega_col: str,
     if "origin" in om.columns:
         om = om.rename(columns={"origin": "decision_origin"})
         key.append("decision_origin")
-    om = om[key + [omega_col]].rename(columns={omega_col: "omega"})
+    status_col = f"{omega_col}_status"
+    keep = [omega_col] + ([status_col] if status_col in om.columns else [])
+    om = om[key + keep].rename(columns={omega_col: "omega", status_col: "omega_status"})
     if om.duplicated(key).any():
         raise OmegaJoinError(f"omega table has duplicate keys on {key}")
 
@@ -90,6 +97,16 @@ def attach_omega(decisions: pd.DataFrame, omega: pd.DataFrame, omega_col: str,
             "for a flat or empty history; store an undefined Omega as null, or pass "
             "allow_zero_omega=True if 0.0 is a real value")
     return out
+
+
+def _split_undefined(om: pd.DataFrame, used_for: str) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Take the reason column off attach_omega's output and list the decisions
+    whose Omega is undefined, each with the reason the omega table gave (missing
+    when it gave none). The selector tables keep the value only."""
+    undefined = om["omega"].isna()
+    reason = om.loc[undefined, "omega_status"] if "omega_status" in om.columns else None
+    listed = om.loc[undefined, SERIES_KEYS + ["decision_origin"]].assign(reason=reason, used_for=used_for)
+    return om.drop(columns="omega_status", errors="ignore"), listed
 
 
 def _decision_origins(po: pd.DataFrame, role: str | None) -> pd.DataFrame:
@@ -154,7 +171,8 @@ def build_tables(forecasts, schema_version, representatives, family_of_model, om
     fit_mask = po.dataset.isin(fit_only_datasets)
     fit_po, fit_excluded = _drop_zero_scale(po[fit_mask], None)
     # fit-only datasets: every origin is used for fitting, so the choice is made before the first one
-    fit_om = attach_omega(_decision_origins(fit_po, None), omega, omega_col, omega_variant, allow_zero_omega)
+    fit_om, fit_undefined = _split_undefined(
+        attach_omega(_decision_origins(fit_po, None), omega, omega_col, omega_variant, allow_zero_omega), "fit")
     fit_units = unit_costs(fit_po, role=None).merge(fit_om.drop(columns="decision_origin"),
                                                     on=SERIES_KEYS, how="left")
 
@@ -167,7 +185,9 @@ def build_tables(forecasts, schema_version, representatives, family_of_model, om
     val = unit_costs(ev, "validation")
     test = unit_costs(ev, "test")
     # evaluation datasets: the choice is made at the first test origin
-    ev_om = attach_omega(_decision_origins(ev, "test"), omega, omega_col, omega_variant, allow_zero_omega)
+    ev_om, ev_undefined = _split_undefined(
+        attach_omega(_decision_origins(ev, "test"), omega, omega_col, omega_variant, allow_zero_omega),
+        "evaluation")
     units = test[UNIT_KEYS].merge(ev_om, on=SERIES_KEYS, how="left", validate="m:1")
     # settings recorded so a later step (e.g. a frozen E2 evaluation) can check that
     # these tables were built the way a frozen specification says they must be
@@ -187,7 +207,8 @@ def build_tables(forecasts, schema_version, representatives, family_of_model, om
                 n_targets_dropped_missing_y=fc.attrs.get("n_targets_dropped_missing_y", 0),
                 omega_variant=omega_variant, settings=settings,
                 excluded_series_horizons=excluded,
-                n_units_undefined_omega=int(units["omega"].isna().sum()))
+                n_units_undefined_omega=int(units["omega"].isna().sum()),
+                undefined_omega=pd.concat([ev_undefined, fit_undefined], ignore_index=True))
 
 
 def seven_selectors(static_threshold, d_omega):
@@ -210,7 +231,7 @@ def fit_pool(tables) -> pd.DataFrame:
 
 
 def run(tables, representatives, static_threshold, fit_scheme="leave_one_dataset_out",
-        min_fit_datasets=2, d_omega_fit=None):
+        min_fit_datasets=3, d_omega_fit=None):
     """Run the seven comparators.
 
     fit_scheme decides how D_Omega is fitted:

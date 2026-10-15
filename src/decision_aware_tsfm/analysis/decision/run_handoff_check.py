@@ -53,6 +53,8 @@ def main(argv=None):
     ap.add_argument("--fit-only-datasets", nargs="*", default=[])
     ap.add_argument("--val-fraction", type=float, default=1 / 3)
     ap.add_argument("--fit-scheme", choices=FIT_SCHEMES, default="leave_one_dataset_out")
+    ap.add_argument("--min-fit-datasets", type=int, default=3,
+                    help="other datasets a leave-one-dataset-out fold needs (decision record 0007: 3)")
     ap.add_argument("--out", type=Path, required=True)
     a = ap.parse_args(argv)
     if a.out.exists():
@@ -67,7 +69,8 @@ def main(argv=None):
                           # interface check: a bundle may have too few origins per series for a
                           # validation third; keep those series so every column is still checked
                           exclude_without_validation=False)
-    res, d_omega = run(tables, reps, a.static_threshold, fit_scheme=a.fit_scheme)
+    res, d_omega = run(tables, reps, a.static_threshold, fit_scheme=a.fit_scheme,
+                       min_fit_datasets=a.min_fit_datasets)
 
     direct = direct_test_costs(forecasts, tables["per_origin"], reps)
     cmp = tables["test"].merge(direct, on=["dataset", "config", "series_id", "horizon", "tau"],
@@ -86,6 +89,9 @@ def main(argv=None):
         series_without_validation_kept="interface check only; an analysis run excludes them",
         evaluation_units=int(len(tables["units"])), result_rows=int(len(res)),
         status_counts={f"{s}/{st}": int(n) for (s, st), n in res.groupby(["selector", "status"]).size().items()},
+        undefined_omega_decisions={
+            f"{u}/{r}": int(n) for (u, r), n in
+            tables["undefined_omega"].groupby(["used_for", "reason"], dropna=False).size().items()},
         column_check=dict(units_compared=int((cmp["_merge"] == "both").sum()), unmatched=unmatched,
                           max_relative_difference=rel,
                           q001_vs_q050_max_gap_in_bundle=med_diff))

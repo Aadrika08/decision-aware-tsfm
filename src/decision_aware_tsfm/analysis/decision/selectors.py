@@ -217,7 +217,9 @@ class LeaveOneDatasetOut:
     fit-only datasets (all origins) and the other evaluation datasets' test
     units, so d itself is never seen while its rule is fitted. A fold whose
     pool covers fewer than min_fit_datasets distinct datasets is not fitted,
-    and its units are reported as insufficient_data with the reason.
+    and its units are reported as insufficient_data with the reason. The
+    default of 3 is decision record 0007 section 2, the same floor as the K3
+    selector's (record 0008 section 3).
 
     fit: callable(fit_units) -> selector with select(inp), e.g. DOmegaLinear.fit.
     """
@@ -227,7 +229,7 @@ class LeaveOneDatasetOut:
     needs_hindsight: bool = False
 
     @classmethod
-    def build(cls, pool: pd.DataFrame, eval_datasets, fit=None, min_fit_datasets: int = 2,
+    def build(cls, pool: pd.DataFrame, eval_datasets, fit=None, min_fit_datasets: int = 3,
               name: str = "d_omega") -> "LeaveOneDatasetOut":
         fit = DOmegaLinear.fit if fit is None else fit
         if min_fit_datasets < 1:

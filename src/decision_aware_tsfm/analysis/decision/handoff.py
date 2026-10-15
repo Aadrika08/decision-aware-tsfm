@@ -16,6 +16,8 @@ Rules applied here, all from the producer's handoff runbook:
     - an Omega row's history may not end after its origin
     - every forecast (series, origin) has an Omega row for the chosen variant with the
       same source revision and source hash
+    - an Omega value may be null (undefined) only with a recognised omega_status; the row
+      must still exist, and the reason is kept and counted. A row that is absent is an error
 Nothing here imports forecasting code.
 """
 from __future__ import annotations
@@ -42,6 +44,11 @@ JOB_PROVENANCE = ("naming_scheme", "source_repository", "source_revision", "sour
 OMEGA_FIELDS = ("dataset", "config", "series_id", "origin", "variant", "source_revision",
                 "source_sha256", "history_start", "history_end", "omega")
 SERIES_ORIGIN = ["dataset", "config", "series_id", "origin"]
+# an undefined Omega is null with one of these reasons, never 0.0 (the producer's vocabulary:
+# omega.compute_omega_checked and cache.readiness). A defined value carries "ok" or no status
+OMEGA_STATUS = "omega_status"
+UNDEFINED_OMEGA_REASONS = ("empty_history", "below_floor", "flat_history", "nonfinite")
+OMEGA_DEFINED = "ok"
 
 
 class HandoffError(CacheError):
@@ -105,6 +112,18 @@ def read_handoff(root, variant: str) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
         raise HandoffError(f"omega.json rows lack {lacking}")
     if (omega["history_end"] > omega["origin"]).any():
         raise HandoffError("omega.json has history ending after its origin")
+    if OMEGA_STATUS not in omega.columns:
+        omega[OMEGA_STATUS] = None
+    undefined = omega["omega"].isna()
+    reasoned = omega[OMEGA_STATUS].map(lambda s: isinstance(s, str) and s in UNDEFINED_OMEGA_REASONS)
+    if (undefined & ~reasoned).any():
+        raise HandoffError(f"{int((undefined & ~reasoned).sum())} omega.json rows have a null Omega without "
+                           f"a recognised omega_status (one of {UNDEFINED_OMEGA_REASONS})")
+    contradictory = ~undefined & omega[OMEGA_STATUS].notna() & (omega[OMEGA_STATUS] != OMEGA_DEFINED)
+    if contradictory.any():
+        raise HandoffError(f"{int(contradictory.sum())} omega.json rows have a defined Omega but omega_status "
+                           f"{sorted({str(s) for s in omega.loc[contradictory, OMEGA_STATUS]})}; a defined "
+                           f"value carries {OMEGA_DEFINED!r} or no status")
     if variant not in set(omega["variant"]):
         raise HandoffError(f"omega variant {variant!r} not in {sorted(set(omega['variant']))}")
 
@@ -112,9 +131,12 @@ def read_handoff(root, variant: str) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
     if prov.duplicated(SERIES_ORIGIN).any():
         raise HandoffError("one (series, origin) has jobs with different source revision/hash")
     om_v = omega[omega["variant"] == variant]
-    joined = prov.merge(om_v, on=SERIES_ORIGIN, how="left", suffixes=("", "_omega"))
-    if joined["omega"].isna().any():
-        raise HandoffError(f"{int(joined['omega'].isna().sum())} forecast (series, origin) pairs "
+    # membership comes from the merge itself, not from the value: a row that is present with a
+    # null Omega is an undefined statistic, and only a row that is absent is a missing join
+    joined = prov.merge(om_v, on=SERIES_ORIGIN, how="left", suffixes=("", "_omega"), indicator="_omega_row")
+    absent = joined["_omega_row"] != "both"
+    if absent.any():
+        raise HandoffError(f"{int(absent.sum())} forecast (series, origin) pairs "
                            f"have no Omega row for variant {variant!r}")
     mismatch = ((joined["source_revision"] != joined["source_revision_omega"])
                 | (joined["source_sha256"] != joined["source_sha256_omega"]))
@@ -134,5 +156,9 @@ def read_handoff(root, variant: str) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
         series_origins=int(len(prov)), models=sorted(forecasts["model"].unique().tolist()),
         seeds=sorted(int(s) for s in forecasts["seed"].unique()),
         omega_variant=variant, omega_rows_for_variant=int(len(om_v)),
+        omega_undefined_rows_for_variant=int(om_v["omega"].isna().sum()),
+        omega_undefined_reasons_for_variant={
+            str(r): int(n) for r, n in
+            om_v.loc[om_v["omega"].isna(), OMEGA_STATUS].value_counts().sort_index().items()},
         omega_sha256=file_sha256(omega_path), handoff_sha256=file_sha256(root / "handoff.json"))
-    return forecasts, omega[list(OMEGA_FIELDS)], report
+    return forecasts, omega[list(OMEGA_FIELDS) + [OMEGA_STATUS]], report

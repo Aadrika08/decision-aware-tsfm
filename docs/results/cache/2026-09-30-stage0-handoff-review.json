@@ -1,0 +1,660 @@
+{
+  "schema_version": 1,
+  "review_date": "2026-09-30",
+  "evidence_kind": "metadata_and_synthetic_handoff_review_not_real_pilot",
+  "issues": [
+    28,
+    45
+  ],
+  "execution_branch": "docs/28-stage0-handoff-review",
+  "producer_commit": "df74d5150cd0ec710380c51048baeeeeb54ec3bf",
+  "input_fingerprints": {
+    "source_commit": "5da6edd43cd880c89bde0c076466ea672251697f",
+    "files": {
+      "series_manifest.json": {
+        "bytes": 87571416,
+        "sha256": "f20898d3954c2c60c600d764bcb97dc4b75da245716d537bec474d0c3a0f7094"
+      },
+      "omega_values.json": {
+        "bytes": 2750426,
+        "sha256": "5bb86ae341f87de7029e80c10f2d8aca299514fcf68b61162a2dec1b43190563"
+      },
+      "stage0prep_fixed_v2.py": {
+        "bytes": 16354,
+        "sha256": "33729e4906e698173406c9b06fb804103e64205f8fb87775e471af27d8c55c73"
+      },
+      "guard_check.py": {
+        "bytes": 345,
+        "sha256": "252810005a52b5e34d51084da1358088bb932c57ac090e8da3ac40d2706d82c5"
+      },
+      "hash_check.py": {
+        "bytes": 247,
+        "sha256": "72391dbd9fbee3c5b079724e89c999a1be55af8237a07caf25093afea5b26ace"
+      }
+    },
+    "heads": {
+      "48": "5da6edd43cd880c89bde0c076466ea672251697f",
+      "47": "df74d5150cd0ec710380c51048baeeeeb54ec3bf",
+      "44": "dd9505d2389a191327e4fb5da937a8c0b289a6a1",
+      "35": "24967444a6f36d49a1d539ec23e01597204df596",
+      "32": "dd685915ed456e5856e2402fa56d1cf5f031fb25",
+      "46": "ead98f85be98f69686ff93ade5187d1458bf759a",
+      "31": "8727790020eda20a79a311f8656b36d491beed6d"
+    }
+  },
+  "manifest_audit": {
+    "active": {
+      "rows": 8761,
+      "unique_ids": 8761,
+      "duplicate_id_extra_rows": 0,
+      "duplicate_scoped_id_extra_rows": 0,
+      "native_identity_with_multiple_ids": 0,
+      "fallback_item_ids": 0,
+      "invalid_item_ids": 0,
+      "legacy_counter_ids": 0,
+      "univariate_null_channels": 5265,
+      "malformed_subset_checksums": 0,
+      "configurations_with_multiple_checksums": 0,
+      "held_out_metadata_rows": 0
+    },
+    "excluded": {
+      "rows": 139127,
+      "unique_ids": 139127,
+      "duplicate_id_extra_rows": 0,
+      "duplicate_scoped_id_extra_rows": 0,
+      "native_identity_with_multiple_ids": 0,
+      "fallback_item_ids": 0,
+      "invalid_item_ids": 0,
+      "legacy_counter_ids": 0,
+      "univariate_null_channels": 135446,
+      "malformed_subset_checksums": 0,
+      "configurations_with_multiple_checksums": 0,
+      "held_out_metadata_rows": 0
+    },
+    "active_excluded_id_overlap": 0,
+    "active_config_counts": {
+      "LOOP_SEATTLE/5T": 323,
+      "LOOP_SEATTLE/H": 323,
+      "M_DENSE/H": 30,
+      "SZ_TAXI/15T": 156,
+      "bitbrains_fast_storage/5T": 2432,
+      "bitbrains_rnd/5T": 936,
+      "bizitobs_application": 2,
+      "bizitobs_l2c/5T": 7,
+      "bizitobs_l2c/H": 7,
+      "bizitobs_service": 42,
+      "electricity/15T": 370,
+      "electricity/D": 158,
+      "electricity/H": 369,
+      "ett1/15T": 7,
+      "ett1/H": 7,
+      "ett2/15T": 7,
+      "ett2/H": 7,
+      "hierarchical_sales/D": 118,
+      "jena_weather/10T": 21,
+      "jena_weather/H": 21,
+      "kdd_cup_2018_with_missing/H": 269,
+      "m4_daily": 2658,
+      "m4_monthly": 46,
+      "m4_weekly": 168,
+      "saugeenday/D": 1,
+      "saugeenday/W": 1,
+      "solar/10T": 137,
+      "solar/H": 137,
+      "us_births/D": 1
+    },
+    "dataset_values": [
+      "Salesforce/GiftEval"
+    ],
+    "active_rows_with_nonfinite_positions_in_trimmed_history": 4078,
+    "raw_trim_bound_violations": 0,
+    "omega": {
+      "rows": 8761,
+      "duplicate_id_extra_rows": 0,
+      "missing_active_ids": 0,
+      "unmatched_ids": 0,
+      "value_checks": {
+        "omega_levels": {
+          "nonfinite_or_out_of_range": 0,
+          "minimum": 0.0,
+          "maximum": 0.9949
+        },
+        "omega_diffs": {
+          "nonfinite_or_out_of_range": 0,
+          "minimum": 0.0,
+          "maximum": 0.8374
+        },
+        "omega_levels_4096": {
+          "nonfinite_or_out_of_range": 0,
+          "minimum": 0.0,
+          "maximum": 0.9871
+        },
+        "omega_diffs_4096": {
+          "nonfinite_or_out_of_range": 0,
+          "minimum": 0.0,
+          "maximum": 0.875
+        }
+      },
+      "recorded_4096_cutoff_mismatches": 0,
+      "finite_count_outside_raw_span": 0,
+      "empty_4096_histories": 25,
+      "empty_4096_configs": {
+        "bitbrains_fast_storage/5T": 18,
+        "kdd_cup_2018_with_missing/H": 7
+      },
+      "empty_4096_rows": [
+        {
+          "series_id": "bitbrains_fast_storage_5T__fastStorage_694_dim0",
+          "config": "bitbrains_fast_storage/5T",
+          "history_start": 3104,
+          "history_end": 7200,
+          "history_length_4096": 0,
+          "omega_levels_4096": 0.0,
+          "omega_diffs_4096": 0.0
+        },
+        {
+          "series_id": "bitbrains_fast_storage_5T__fastStorage_694_dim1",
+          "config": "bitbrains_fast_storage/5T",
+          "history_start": 3104,
+          "history_end": 7200,
+          "history_length_4096": 0,
+          "omega_levels_4096": 0.0,
+          "omega_diffs_4096": 0.0
+        },
+        {
+          "series_id": "bitbrains_fast_storage_5T__fastStorage_695_dim0",
+          "config": "bitbrains_fast_storage/5T",
+          "history_start": 3104,
+          "history_end": 7200,
+          "history_length_4096": 0,
+          "omega_levels_4096": 0.0,
+          "omega_diffs_4096": 0.0
+        },
+        {
+          "series_id": "bitbrains_fast_storage_5T__fastStorage_695_dim1",
+          "config": "bitbrains_fast_storage/5T",
+          "history_start": 3104,
+          "history_end": 7200,
+          "history_length_4096": 0,
+          "omega_levels_4096": 0.0,
+          "omega_diffs_4096": 0.0
+        },
+        {
+          "series_id": "bitbrains_fast_storage_5T__fastStorage_41_dim0",
+          "config": "bitbrains_fast_storage/5T",
+          "history_start": 3104,
+          "history_end": 7200,
+          "history_length_4096": 0,
+          "omega_levels_4096": 0.0,
+          "omega_diffs_4096": 0.0
+        },
+        {
+          "series_id": "bitbrains_fast_storage_5T__fastStorage_41_dim1",
+          "config": "bitbrains_fast_storage/5T",
+          "history_start": 3104,
+          "history_end": 7200,
+          "history_length_4096": 0,
+          "omega_levels_4096": 0.0,
+          "omega_diffs_4096": 0.0
+        },
+        {
+          "series_id": "bitbrains_fast_storage_5T__fastStorage_1113_dim0",
+          "config": "bitbrains_fast_storage/5T",
+          "history_start": 3104,
+          "history_end": 7200,
+          "history_length_4096": 0,
+          "omega_levels_4096": 0.0,
+          "omega_diffs_4096": 0.0
+        },
+        {
+          "series_id": "bitbrains_fast_storage_5T__fastStorage_1113_dim1",
+          "config": "bitbrains_fast_storage/5T",
+          "history_start": 3104,
+          "history_end": 7200,
+          "history_length_4096": 0,
+          "omega_levels_4096": 0.0,
+          "omega_diffs_4096": 0.0
+        },
+        {
+          "series_id": "bitbrains_fast_storage_5T__fastStorage_696_dim0",
+          "config": "bitbrains_fast_storage/5T",
+          "history_start": 3104,
+          "history_end": 7200,
+          "history_length_4096": 0,
+          "omega_levels_4096": 0.0,
+          "omega_diffs_4096": 0.0
+        },
+        {
+          "series_id": "bitbrains_fast_storage_5T__fastStorage_696_dim1",
+          "config": "bitbrains_fast_storage/5T",
+          "history_start": 3104,
+          "history_end": 7200,
+          "history_length_4096": 0,
+          "omega_levels_4096": 0.0,
+          "omega_diffs_4096": 0.0
+        },
+        {
+          "series_id": "bitbrains_fast_storage_5T__fastStorage_790_dim0",
+          "config": "bitbrains_fast_storage/5T",
+          "history_start": 3104,
+          "history_end": 7200,
+          "history_length_4096": 0,
+          "omega_levels_4096": 0.0,
+          "omega_diffs_4096": 0.0
+        },
+        {
+          "series_id": "bitbrains_fast_storage_5T__fastStorage_790_dim1",
+          "config": "bitbrains_fast_storage/5T",
+          "history_start": 3104,
+          "history_end": 7200,
+          "history_length_4096": 0,
+          "omega_levels_4096": 0.0,
+          "omega_diffs_4096": 0.0
+        },
+        {
+          "series_id": "bitbrains_fast_storage_5T__fastStorage_1034_dim0",
+          "config": "bitbrains_fast_storage/5T",
+          "history_start": 3104,
+          "history_end": 7200,
+          "history_length_4096": 0,
+          "omega_levels_4096": 0.0,
+          "omega_diffs_4096": 0.0
+        },
+        {
+          "series_id": "bitbrains_fast_storage_5T__fastStorage_1034_dim1",
+          "config": "bitbrains_fast_storage/5T",
+          "history_start": 3104,
+          "history_end": 7200,
+          "history_length_4096": 0,
+          "omega_levels_4096": 0.0,
+          "omega_diffs_4096": 0.0
+        },
+        {
+          "series_id": "bitbrains_fast_storage_5T__fastStorage_1065_dim0",
+          "config": "bitbrains_fast_storage/5T",
+          "history_start": 3104,
+          "history_end": 7200,
+          "history_length_4096": 0,
+          "omega_levels_4096": 0.0,
+          "omega_diffs_4096": 0.0
+        },
+        {
+          "series_id": "bitbrains_fast_storage_5T__fastStorage_1065_dim1",
+          "config": "bitbrains_fast_storage/5T",
+          "history_start": 3104,
+          "history_end": 7200,
+          "history_length_4096": 0,
+          "omega_levels_4096": 0.0,
+          "omega_diffs_4096": 0.0
+        },
+        {
+          "series_id": "bitbrains_fast_storage_5T__fastStorage_687_dim0",
+          "config": "bitbrains_fast_storage/5T",
+          "history_start": 3104,
+          "history_end": 7200,
+          "history_length_4096": 0,
+          "omega_levels_4096": 0.0,
+          "omega_diffs_4096": 0.0
+        },
+        {
+          "series_id": "bitbrains_fast_storage_5T__fastStorage_687_dim1",
+          "config": "bitbrains_fast_storage/5T",
+          "history_start": 3104,
+          "history_end": 7200,
+          "history_length_4096": 0,
+          "omega_levels_4096": 0.0,
+          "omega_diffs_4096": 0.0
+        },
+        {
+          "series_id": "kdd_cup_2018_with_missing_H__T248",
+          "config": "kdd_cup_2018_with_missing/H",
+          "history_start": 5384,
+          "history_end": 9480,
+          "history_length_4096": 0,
+          "omega_levels_4096": 0.0,
+          "omega_diffs_4096": 0.0
+        },
+        {
+          "series_id": "kdd_cup_2018_with_missing_H__T249",
+          "config": "kdd_cup_2018_with_missing/H",
+          "history_start": 5384,
+          "history_end": 9480,
+          "history_length_4096": 0,
+          "omega_levels_4096": 0.0,
+          "omega_diffs_4096": 0.0
+        },
+        {
+          "series_id": "kdd_cup_2018_with_missing_H__T250",
+          "config": "kdd_cup_2018_with_missing/H",
+          "history_start": 5384,
+          "history_end": 9480,
+          "history_length_4096": 0,
+          "omega_levels_4096": 0.0,
+          "omega_diffs_4096": 0.0
+        },
+        {
+          "series_id": "kdd_cup_2018_with_missing_H__T251",
+          "config": "kdd_cup_2018_with_missing/H",
+          "history_start": 5384,
+          "history_end": 9480,
+          "history_length_4096": 0,
+          "omega_levels_4096": 0.0,
+          "omega_diffs_4096": 0.0
+        },
+        {
+          "series_id": "kdd_cup_2018_with_missing_H__T252",
+          "config": "kdd_cup_2018_with_missing/H",
+          "history_start": 5384,
+          "history_end": 9480,
+          "history_length_4096": 0,
+          "omega_levels_4096": 0.0,
+          "omega_diffs_4096": 0.0
+        },
+        {
+          "series_id": "kdd_cup_2018_with_missing_H__T253",
+          "config": "kdd_cup_2018_with_missing/H",
+          "history_start": 5384,
+          "history_end": 9480,
+          "history_length_4096": 0,
+          "omega_levels_4096": 0.0,
+          "omega_diffs_4096": 0.0
+        },
+        {
+          "series_id": "kdd_cup_2018_with_missing_H__T263",
+          "config": "kdd_cup_2018_with_missing/H",
+          "history_start": 5384,
+          "history_end": 9480,
+          "history_length_4096": 0,
+          "omega_levels_4096": 0.0,
+          "omega_diffs_4096": 0.0
+        }
+      ],
+      "finite_count_less_than_raw_capped_span": 3618,
+      "raw_history_shorter_than_4096": 1764,
+      "per_forecast_origin_rows": false,
+      "interpretation": "Bounds checked against the series trim boundary; no Omega recomputation or per-origin leakage certification."
+    },
+    "interface": {
+      "manifest_top_level_keys": [
+        "active_dev_series",
+        "excluded_series",
+        "held_out_strict"
+      ],
+      "active_row_fields": [
+        "channel",
+        "config",
+        "dataset",
+        "horizons",
+        "item_id",
+        "item_id_is_fallback",
+        "length",
+        "raw_length",
+        "series_id",
+        "source_checksum",
+        "split_boundary_index",
+        "status",
+        "subset",
+        "test_trim"
+      ],
+      "workload_required_fields_absent_by_name": [
+        "context_length",
+        "context_start",
+        "frequency",
+        "horizon",
+        "origin",
+        "seed",
+        "source_length",
+        "source_path",
+        "source_revision",
+        "source_sha256",
+        "start_timestamp",
+        "training_end",
+        "usable_end",
+        "usable_start",
+        "validation_end"
+      ],
+      "omega_top_level_keys": [
+        "omega_values"
+      ],
+      "omega_row_fields": [
+        "history_length_4096",
+        "history_start_index_4096",
+        "omega_diffs",
+        "omega_diffs_4096",
+        "omega_levels",
+        "omega_levels_4096",
+        "series_id"
+      ],
+      "production_naming_header_present": false,
+      "caution": "Absent-by-name fields are a mapping checklist, not evidence the Stage 0 inventory is invalid."
+    },
+    "roster_observations": {
+      "hospital_active_rows": 0,
+      "jena_flat_active_rows": 0,
+      "us_births_active_rows": 1
+    },
+    "limitations": [
+      "Metadata audit only; source/subset hashes were not recomputed from raw arrays.",
+      "Stable mappings verified within this snapshot; Stage 0 was not regenerated or reordered.",
+      "No forecast-window schedule, approved roles/folds, or real consumer acceptance inferred."
+    ]
+  },
+  "native_admission_probe": {
+    "status": "blocked",
+    "evidence_kind": "pilot_readiness",
+    "reasons": [
+      "ValueError: Workload schema_version must be 1"
+    ],
+    "checked_at": "2026-09-30T16:01:50.590878+00:00",
+    "checker_sha256": "66a5a76712dedf8719126ec1343a79bc298e84829046ccb814a232984521eae5",
+    "source_windows_verified": 0,
+    "probe_kind": "native_inventory_as_workload_admission",
+    "interpretation": "Expected shape rejection: a series inventory is not an executable workload. See the separate semantic mapping checklist.",
+    "source_loader_calls": 0,
+    "adapter_loader_calls": 0
+  },
+  "consumer_probes": {
+    "decision": {
+      "input_rows": 9792,
+      "partitions": 408,
+      "probes": [
+        {
+          "name": "native_producer_schema_v1",
+          "outcome": "rejected",
+          "error_type": "NotImplementedError",
+          "message": "cache schema 1 is not mapped yet. Supported: ('fixture-v0',). Pending from the cache owner: how origin/step/horizon become a timestamp, and how dataset/config map to manifest subset names."
+        },
+        {
+          "name": "diagnostic_rename_only_preserving_all_seeds",
+          "outcome": "rejected",
+          "error_type": "DuplicateCacheKeyError",
+          "message": "9792 rows share a cache key, e.g. [{'dataset': 'fx_tau_flip', 'config': 'H', 'series_id': 'fx_tau_flip/s4', 'model': 'AutoETS', 'horizon': 24, 'origin': 1001, 'step': 1}, {'dataset': 'fx_tau_flip', 'config': 'H', 'series_id': 'fx_tau_flip/s4', 'model': 'AutoETS', 'horizon': 24, 'origin': 1001, 'step': 2}]"
+        }
+      ]
+    },
+    "k3": {
+      "fixture": {
+        "current": {
+          "status": "fixture_valid",
+          "variant": "current",
+          "partitions": 408,
+          "rows": 9792,
+          "comparisons": 136,
+          "series": 34,
+          "series_origins": 68,
+          "horizons": [
+            24
+          ],
+          "seeds": [
+            42,
+            43
+          ],
+          "models_by_family": {
+            "classical": [
+              "AutoETS",
+              "SeasonalNaive"
+            ],
+            "tsfm": [
+              "Moirai-small"
+            ]
+          },
+          "taus": [
+            0.01,
+            0.05,
+            0.09,
+            0.25,
+            0.4,
+            0.5,
+            0.6,
+            0.75,
+            0.91,
+            0.95,
+            0.99
+          ],
+          "provenance_checked_jobs": 408,
+          "unused_omega_sources": 0,
+          "distinct_omega": 29,
+          "omega_range": [
+            0.1,
+            0.85
+          ]
+        },
+        "last_4096": {
+          "status": "fixture_valid",
+          "variant": "last_4096",
+          "partitions": 408,
+          "rows": 9792,
+          "comparisons": 136,
+          "series": 34,
+          "series_origins": 68,
+          "horizons": [
+            24
+          ],
+          "seeds": [
+            42,
+            43
+          ],
+          "models_by_family": {
+            "classical": [
+              "AutoETS",
+              "SeasonalNaive"
+            ],
+            "tsfm": [
+              "Moirai-small"
+            ]
+          },
+          "taus": [
+            0.01,
+            0.05,
+            0.09,
+            0.25,
+            0.4,
+            0.5,
+            0.6,
+            0.75,
+            0.91,
+            0.95,
+            0.99
+          ],
+          "provenance_checked_jobs": 408,
+          "unused_omega_sources": 0,
+          "distinct_omega": 29,
+          "omega_range": [
+            0.1,
+            0.85
+          ]
+        }
+      },
+      "negative_controls": [
+        {
+          "name": "repository_header_mismatch",
+          "expected": "reject",
+          "observed": "fixture_valid"
+        },
+        {
+          "name": "missing_real_job_metadata",
+          "expected": "reject",
+          "observed": "ok",
+          "partitions": 3,
+          "provenance_checked_jobs": 0
+        }
+      ],
+      "negative_control_inputs": "Invented data only; any consumer status=ok is a demonstrated validation gap, not real acceptance."
+    }
+  },
+  "tests": {
+    "passed": 24,
+    "failed": 0,
+    "skipped": 0,
+    "pinned_generator_determinism_test_ran": true,
+    "command": "PYTHONPATH=src DECISION_FIXTURE_SOURCE=artifacts/runs/stage0-handoff-review-20260930/sources/decision python -m unittest tests.integration.test_cache_planner tests.integration.test_pilot_readiness tests.integration.test_consumer_handoff -v"
+  },
+  "environment": {
+    "python": "3.11.15",
+    "numpy": "1.26.4",
+    "pandas": "2.2.3",
+    "pyarrow": "16.1.0",
+    "scipy": "1.11.4"
+  },
+  "fixture": {
+    "partitions": 408,
+    "rows": 9792,
+    "series": 34,
+    "series_origins": 68,
+    "seeds": [
+      42,
+      43
+    ],
+    "seed_meaning": "duplicate synthetic coverage, not independent model runs",
+    "omega_meaning": "planted current/last_4096 labels, not computed descriptors",
+    "handoff_sha256": "a6e1ec824e6e8fcf4d897e699bee93a20169b0ff69a5212eb22d6ac535591e5c",
+    "omega_sha256": "af504a50fdf0362d3b3d7e787cc9c5505e023233e9ec3238ec20d8ed3162b822",
+    "archive": "artifacts/runs/stage0-handoff-review-20260930/consumer-handoff-2026-09-30.zip",
+    "archive_bytes": 2440658,
+    "archive_sha256": "5f1f0df0de17282ffdbae4c0cd4fc8e356511dfbf774bf6e6da54ed54a16b94c",
+    "archive_payload_hashes_verified": true
+  },
+  "artifact_root": "artifacts/runs/stage0-handoff-review-20260930",
+  "artifact_hashes": {
+    "assemble_evidence.py": "5b421f6725e4329b1e19f03dbbcd85e684e7c2cc639f0ab699084c4e886d6956",
+    "audit_manifest.py": "6e1e1ed3834af6f0f156a7f897d4583dab8beb73d3f6c68bc2783534bb9da4d0",
+    "collect_inputs.py": "9453379a51e5b40fd52811b83adf800ffa3503f39fbb3e8244308a1be10bde1e",
+    "decision-probe.json": "bedf33b9e9db22f045e8e10c2dde4d43477675e98ade7491ecfc309516e6618e",
+    "k3-probe.json": "90443fa1c28ba547718f0baff0601b710caf92902d4bba1b8e58f85c64a94d26",
+    "manifest-audit.json": "a6af13190d677e88e1fd3eb7ba504768a1334f1c4476ad9b6b6d3bc798650d69",
+    "mismatched-repository-omega.json": "bd3d647b292bf6552b7c219b10bb3ec9218d77c81cb8ddb0db3da232ab55192d",
+    "native-readiness-probe.json": "99459deaa74f4fadad09a7e57c3183edf8fcb0268f86f651626baea5161977b4",
+    "probe_consumers.py": "6ab842ac87f3482b420385c47e1fe1e1f882a60f14835db7c8deaecf2e4ca815"
+  },
+  "log_hashes": {
+    "logs/collection.log": "8f32b3ba7f28cc8f57239342123923b9f8e75d8842240b6bcf0ba8deb0447b29",
+    "logs/decision-probe.log": "bedf33b9e9db22f045e8e10c2dde4d43477675e98ade7491ecfc309516e6618e",
+    "logs/fixture-export.log": "a97ec6a9dcb594032814243aad1165ae3713b15f222322d6d16c98fb284d565c",
+    "logs/k3-probe.log": "90443fa1c28ba547718f0baff0601b710caf92902d4bba1b8e58f85c64a94d26",
+    "logs/manifest-audit.log": "a6af13190d677e88e1fd3eb7ba504768a1334f1c4476ad9b6b6d3bc798650d69",
+    "logs/targeted-tests.log": "3d4c63fbbe57d648f35fb89fdefbce6e9a97e2d0e93901888f81738193e2885a",
+    "logs/reproduction-check.log": "568040d6d0c41ddf408e38d98c354eb819ea762eaffbe41be4116560f2f45eed"
+  },
+  "limits": [
+    "No raw development or held-out source arrays opened.",
+    "No Omega recomputation, model inference, scientific split, or dataset exclusion performed.",
+    "GitHub source snapshots were read with Aadrika08 credentials; no comments, reviews, PRs, releases, or merges were published.",
+    "Consumer probes are local verification, not owner acceptance; negative controls use invented inputs only.",
+    "No producer or consumer production-code changes; large-file storage remains undecided."
+  ],
+  "reproduction_verification": {
+    "directory": "artifacts/runs/stage0-handoff-repeat-940e2yvd",
+    "documented_command_exit_code": 0,
+    "tests_passed": 24,
+    "tests_skipped": 0,
+    "manifest_and_consumer_results_match": true,
+    "saved_evidence_fingerprint_assertion_passed": true,
+    "log_sha256": {
+      "audit.log": "a6af13190d677e88e1fd3eb7ba504768a1334f1c4476ad9b6b6d3bc798650d69",
+      "decision.log": "bedf33b9e9db22f045e8e10c2dde4d43477675e98ade7491ecfc309516e6618e",
+      "export.log": "d5107cbc4876be0c8670a2de5ed4b43ac7f7947f351ccceb29e4d6548775bfa0",
+      "k3.log": "90443fa1c28ba547718f0baff0601b710caf92902d4bba1b8e58f85c64a94d26",
+      "tests.log": "fefb31639f617703b5d6bbda8133fc438b7b3a8b8d9ef0e8cef5d7ace6e2bc04"
+    }
+  }
+}

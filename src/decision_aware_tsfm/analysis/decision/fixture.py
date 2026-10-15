@@ -32,6 +32,9 @@ Also here:
                         flat decision fixture: y = 10, classical = 8, TSFM = 11 at
                         every quantile. Expected mean pinball: classical 2*tau,
                         TSFM 1 - tau, so the winner flips at tau = 1/3.
+  make_roster_fixture() the fixture plus a third classical model, so the cache has
+                        three classical candidates and one TSFM like the pilot
+                        roster. Used by the representative selection (#41).
 """
 from __future__ import annotations
 
@@ -115,6 +118,25 @@ def make_fixture(seed: int = 7) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFram
     for c in ("seed", "horizon", "origin", "step"):
         fc[c] = fc[c].astype("int64")
     return fc, pd.DataFrame(omega_rows), planted_answers()
+
+
+ROSTER_EXTRA_MODEL = "AutoARIMA"
+ROSTER_EXTRA = (0.8, 1.2)                   # (bias, spread), the same in every dataset
+ROSTER_FAMILY_OF_MODEL = {**FAMILY_OF_MODEL, ROSTER_EXTRA_MODEL: "classical"}
+
+
+def make_roster_fixture(seed: int = 7) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Returns (forecasts in canonical form, omega table): make_fixture plus the
+    classical model ROSTER_EXTRA_MODEL. Its forecast is SeasonalNaive's moved to
+    the (bias, spread) in ROSTER_EXTRA. make_fixture itself is unchanged."""
+    fc, omega, _ = make_fixture(seed)
+    z = stats.norm.ppf(np.asarray(TAU_GRID))
+    qcols = [qcol(x) for x in TAU_GRID]
+    extra = fc[fc.model == "SeasonalNaive"].copy()
+    extra["model"] = ROSTER_EXTRA_MODEL
+    extra[qcols] = (extra[qcols].to_numpy() + (ROSTER_EXTRA[0] - SEASONAL_NAIVE[0])
+                    + (ROSTER_EXTRA[1] - SEASONAL_NAIVE[1]) * z[None, :])
+    return pd.concat([fc, extra], ignore_index=True), omega
 
 
 PRODUCER_SCHEMA = "producer-v1"

@@ -81,6 +81,27 @@ class LeaveOneDatasetOutFitting(unittest.TestCase):
         self.assertTrue(dm.note.str.contains("4 other dataset").all())
         self.assertTrue((res[res.selector != "d_omega"].status == "selected").all())
 
+    def test_default_minimum_is_three_other_datasets(self):
+        """Record 0007 section 2: three other datasets fit a fold, two do not."""
+        pool = fit_pool(self.tables).dropna(subset=["omega"])
+        four = pool[pool.dataset.isin(EVAL_DATASETS)]
+        d = LeaveOneDatasetOut.build(four, EVAL_DATASETS)
+        self.assertEqual(d.min_fit_datasets, 3)
+        self.assertFalse(any(isinstance(f, NotFitted) for f in d.folds.values()))
+        for ds, fold in d.folds.items():
+            self.assertEqual(len(fold.fitted_datasets), 3, ds)
+        three = four[four.dataset != EVAL_DATASETS[-1]]
+        d = LeaveOneDatasetOut.build(three, EVAL_DATASETS[:-1])
+        self.assertTrue(all(isinstance(f, NotFitted) for f in d.folds.values()))
+        for ds, fold in d.folds.items():
+            self.assertIn("2 other dataset(s) with usable units, need 3",
+                          fold.describe()["not_fitted"], ds)
+
+    def test_run_uses_the_same_default_minimum(self):
+        _, d = run(self.tables, REPRESENTATIVES, FIXTURE_STATIC_THRESHOLD)
+        self.assertEqual(d.min_fit_datasets, 3)
+        self.assertFalse(any(isinstance(f, NotFitted) for f in d.folds.values()))
+
     def test_a_fold_fitted_on_its_own_dataset_is_refused(self):
         units = self.tables["units"]
         leaky = DOmegaLinear.fit(fit_pool(self.tables))              # includes every dataset
