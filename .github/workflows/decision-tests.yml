@@ -24,7 +24,7 @@ jobs:
         run: |
           status=0
           found=0
-          for suite in decision experiments e3 k2; do
+          for suite in decision experiments e3 k2 omega; do
             if [ -d "tests/unit/$suite" ]; then
               found=1
               echo "::group::tests/unit/$suite"
