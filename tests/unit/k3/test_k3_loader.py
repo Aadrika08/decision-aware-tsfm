@@ -61,6 +61,7 @@ def omega_doc(series=(("s0", 0.2), ("s1", 0.5), ("s2", 0.8)), origin=5000, fixtu
             rows.append(dict(dataset="synthetic", config="hourly", series_id=sid,
                              source_revision=REV, source_sha256=SHA, origin=origin,
                              variant=v, history_start=start, history_end=origin,
+                             omega_status="ok",
                              omega=value if v == "current" else value + 0.01))
     doc = {"schema_version": 1, "fixture": fixture,
            "variants": {"current": "full history", "last_4096": "last 4096 steps"},
@@ -210,6 +211,7 @@ class RejectionRulesTests(LoaderTestCase):
             for row in doc["rows"]:
                 if row["series_id"] == "s1":
                     row["omega"] = None
+                    row.pop("omega_status", None)
         with self.assertRaisesRegex(K3InputError, "needs a non-empty omega_status"):
             run(self.tmp, build_cache(self.tmp), omega_doc(mutate=blank))
 
@@ -404,7 +406,7 @@ class UndefinedOmegaNullWithReasonCarriedThroughForDeferralTests(LoaderTestCase)
                 if row["series_id"] == "s1":
                     row["omega"] = 0.0
                     row["omega_status"] = "flat_history"
-        with self.assertRaisesRegex(K3InputError, "omega_status set on a defined omega"):
+        with self.assertRaisesRegex(K3InputError, "a defined value must be"):
             run(self.tmp, build_cache(self.tmp), omega_doc(mutate=zero))
 
 
@@ -453,6 +455,128 @@ class UndefinedOmegaNullWithReasonCarriedThroughForDeferralTests(LoaderTestCase)
         self.assertTrue(report["distinct_datasets"] == 0)
         self.assertIsNone(report["omega_range"])
         self.assertTrue(report["undefined_omega"] == 3)
+
+
+class VeerReviewOn35Tests(LoaderTestCase):
+    """Items raised in Veer's review of #35."""
+
+    def test_defined_omega_must_carry_status_ok(self):
+        """A number under flat_history is a stand-in, not a measurement."""
+        def bad(doc):
+            for row in doc["rows"]:
+                if row["series_id"] == "s1":
+                    row["omega_status"] = "flat_history"
+        with self.assertRaisesRegex(K3InputError, "a defined value must be"):
+            run(self.tmp, build_cache(self.tmp), omega_doc(mutate=bad))
+
+    def test_null_omega_may_not_claim_status_ok(self):
+        def bad(doc):
+            for row in doc["rows"]:
+                if row["series_id"] == "s1":
+                    row["omega"] = None
+                    row["omega_status"] = "ok"
+        with self.assertRaisesRegex(K3InputError, "'ok' on a null omega"):
+            run(self.tmp, build_cache(self.tmp), omega_doc(mutate=bad))
+
+    def test_omega_outside_zero_one_refused(self):
+        for bad_value in (1.5, -0.1):
+            def out(doc, v=bad_value):
+                doc["rows"][0]["omega"] = v
+            with self.assertRaisesRegex(K3InputError, r"outside \[0, 1\]"):
+                run(self.tmp, build_cache(self.tmp), omega_doc(mutate=out))
+
+    def test_held_out_dataset_refused(self):
+        """The engine refuses m5 and pjm before any cost; so must this."""
+        for name in ("m5", "M5_daily", "retail_pjm"):
+            def rename(doc, n=name):
+                for row in doc["rows"]:
+                    row["dataset"] = n
+            with self.assertRaisesRegex(K3InputError, "Held-out data refused"):
+                run(self.tmp, build_cache(self.tmp), omega_doc(mutate=rename))
+
+    def test_held_out_config_refused(self):
+        def rename(doc):
+            for row in doc["rows"]:
+                row["config"] = "PJM"
+        with self.assertRaisesRegex(K3InputError, "Held-out data refused"):
+            run(self.tmp, build_cache(self.tmp), omega_doc(mutate=rename))
+
+    def test_actuals_differing_across_seeds_refused(self):
+        """Same target position, two seeds, two different y_true."""
+        hashes = build_cache(self.tmp)
+        for model, family, pred in (("classical_m", "classical", 9.0),
+                                    ("tsfm_m", "tsfm", 10.5)):
+            name = f"s0_{model}_seed43.parquet"
+            write_job(self.tmp / name, f"s0:{model}:43", "s0", 5000, model, family,
+                      y=11.0, pred=pred, seed=43,   # same targets, different actual
+                      job_meta={"source_revision": REV, "source_sha256": SHA})
+            hashes[name] = hashlib.sha256((self.tmp / name).read_bytes()).hexdigest()
+        with self.assertRaisesRegex(K3InputError, "same target position"):
+            run(self.tmp, hashes, omega_doc())
+
+    def test_actuals_differing_across_horizons_refused(self):
+        """Horizon 3 covers the same first two targets as horizon 2."""
+        hashes = build_cache(self.tmp)
+        for model, family in (("classical_m", "classical"), ("tsfm_m", "tsfm")):
+            name = f"s0_{model}_h3.parquet"
+            write_job(self.tmp / name, f"s0:{model}:h3", "s0", 5000, model, family,
+                      y=12.0, pred=9.0, horizon=3,
+                      job_meta={"source_revision": REV, "source_sha256": SHA})
+            hashes[name] = hashlib.sha256((self.tmp / name).read_bytes()).hexdigest()
+        with self.assertRaisesRegex(K3InputError, "same target position"):
+            run(self.tmp, hashes, omega_doc())
+
+    def test_sidecar_hash_checked_when_supplied(self):
+        hashes = build_cache(self.tmp)
+        path = self.tmp / "omega.json"
+        path.write_text(json.dumps(omega_doc()))
+        with self.assertRaisesRegex(K3InputError, "SHA-256 does not match"):
+            load_k3_inputs(self.tmp, hashes, path, "current", omega_sha256="f" * 64)
+
+    def test_sidecar_hash_accepted_when_correct(self):
+        hashes = build_cache(self.tmp)
+        path = self.tmp / "omega.json"
+        path.write_text(json.dumps(omega_doc()))
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        _, _, report = load_k3_inputs(self.tmp, hashes, path, "current",
+                                      omega_sha256=digest)
+        self.assertIs(report["omega_sha256_verified"], True)
+
+
+class PlantedBugsVeerCaughtTests(LoaderTestCase):
+    """The four planted bugs Veer's run found my tests did not cover."""
+
+    def test_listed_partition_absent_refused(self):
+        hashes = build_cache(self.tmp)
+        hashes["never_written.parquet"] = "a" * 64
+        with self.assertRaisesRegex(K3InputError, "not found"):
+            run(self.tmp, hashes, omega_doc())
+
+    def test_fixture_cache_refused_without_opt_in(self):
+        """Fixture *cache*, real Omega: still has to be opted into."""
+        hashes = build_cache(self.tmp, fixture=True)
+        with self.assertRaisesRegex(K3InputError, "Fixture cache refused"):
+            run(self.tmp, hashes, omega_doc())
+
+    def test_left_over_omega_rows_are_counted(self):
+        extra = (("s0", 0.2), ("s1", 0.5), ("s2", 0.8), ("s3", 0.9))
+        _, _, report = run(self.tmp, build_cache(self.tmp), omega_doc(series=extra))
+        self.assertEqual(report["unused_omega_sources"], 1)
+
+    def test_timestamp_mismatch_refused(self):
+        hashes = {}
+        for sid, _ in (("s0", 0.2), ("s1", 0.5), ("s2", 0.8)):
+            for model, family, pred in (("classical_m", "classical", 9.0),
+                                        ("tsfm_m", "tsfm", 10.5)):
+                name = f"{sid}_{model}.parquet"
+                stamps = ({1: "2020-06-06T05:00:00"}
+                          if (sid, model) == ("s1", "tsfm_m") else None)
+                write_job(self.tmp / name, f"{sid}:{model}", sid, 5000, model, family,
+                          pred=pred, timestamps=stamps,
+                          job_meta={"source_revision": REV, "source_sha256": SHA})
+                hashes[name] = hashlib.sha256((self.tmp / name).read_bytes()).hexdigest()
+        with self.assertRaisesRegex(K3InputError, "same target position"):
+            run(self.tmp, hashes, omega_doc())
 
 
 if __name__ == "__main__":
