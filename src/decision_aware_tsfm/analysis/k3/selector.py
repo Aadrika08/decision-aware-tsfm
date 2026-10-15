@@ -252,7 +252,11 @@ def cost_deferral_frontier(spec, omega, tau, cost_classical, cost_tsfm, datasets
     points = [evaluate_selector(spec, omega, tau, cost_classical, cost_tsfm,
                                 datasets, margin=m, deferral_cost=deferral_cost)
               for m in sorted(margins)]
+    pricing = {p["deferral_pricing"] for p in points}
     return {"points": points,
+            # realized_costs is read on its own, so the pricing has to travel
+            # with it: an oracle-priced curve is a bound, not a result.
+            "deferral_pricing": pricing.pop() if len(pricing) == 1 else sorted(pricing),
             "margins": [p["margin"] for p in points],
             "deferral_rates": [p["deferral_rate"] for p in points],
             "realized_costs": [p["realized_cost"] for p in points]}
@@ -304,9 +308,13 @@ def leave_one_dataset_out(omega, tau, cost_classical, cost_tsfm, datasets,
 
     selector_cost = sum(f["selector"]["realized_cost"] for f in folds)
     baseline_cost = sum(f["tau_only"]["realized_cost"] for f in folds)
+    pricing = {f[side]["deferral_pricing"] for f in folds for side in ("selector", "tau_only")}
     return {
         "status": "ok", "margin": float(margin), "folds": folds,
         "datasets": names,
+        # the totals below are summed across folds, so they carry the pricing
+        # too; oracle-priced totals are an upper bound, not a result.
+        "deferral_pricing": pricing.pop() if len(pricing) == 1 else sorted(pricing),
         "selector_total_cost": selector_cost,
         "tau_only_total_cost": baseline_cost,
         "omega_advantage": baseline_cost - selector_cost,
