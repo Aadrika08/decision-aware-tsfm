@@ -300,5 +300,35 @@ class DeferralPricingTests(unittest.TestCase):
             self.assertEqual(point["deferral_pricing"], "validation_comparator")
 
 
+class PricingFlagOnTotalsTests(unittest.TestCase):
+    """Veer's review on #54: summed totals must carry the pricing too."""
+
+    def test_frontier_totals_carry_the_pricing(self):
+        frontier = cost_deferral_frontier(fit_selector(*planted(seed=1)),
+                                          *planted(seed=2))
+        self.assertEqual(frontier["deferral_pricing"], "oracle_upper_bound")
+        self.assertEqual(len(frontier["realized_costs"]), len(frontier["points"]))
+
+    def test_frontier_totals_say_validation_when_priced_properly(self):
+        omega, tau, classical, tsfm, datasets = planted(seed=2)
+        validation = np.maximum(classical, tsfm)
+        frontier = cost_deferral_frontier(fit_selector(*planted(seed=1)), omega, tau,
+                                          classical, tsfm, datasets,
+                                          deferral_cost=validation)
+        self.assertEqual(frontier["deferral_pricing"], "validation_comparator")
+
+    def test_leave_one_dataset_out_totals_carry_the_pricing(self):
+        result = leave_one_dataset_out(*planted(n_datasets=5))
+        self.assertEqual(result["deferral_pricing"], "oracle_upper_bound")
+        self.assertIn("selector_total_cost", result)
+
+    def test_leave_one_dataset_out_says_validation_when_priced_properly(self):
+        omega, tau, classical, tsfm, datasets = planted(n_datasets=5)
+        validation = np.maximum(classical, tsfm)
+        result = leave_one_dataset_out(omega, tau, classical, tsfm, datasets,
+                                       deferral_cost=validation)
+        self.assertEqual(result["deferral_pricing"], "validation_comparator")
+
+
 if __name__ == "__main__":
     unittest.main()
