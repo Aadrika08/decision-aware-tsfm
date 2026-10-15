@@ -17,9 +17,9 @@ Rules taken from docs/runbooks/cache-consumer-contract.md:
   * never attach Omega whose history extends past the forecast origin;
   * match actuals and windows across models before any comparison;
   * one explicit Omega variant per analysis -- variants are never mixed;
-  * an undefined Omega arrives as null with a stated reason, never as 0.0,
+  * an undefined Omega arrives as null with an `omega_status`, never as 0.0,
     and is carried through so selectors defer on it (agreed with Veer and
-    Dayson, Slack 2026-10-07);
+    Dayson, Slack 2026-10-07; field name per the producer and engine);
   * production names follow dataset-config-v1: `dataset` and `config` are
     separate fields and neither carries the legacy slash form, and a source
     repository such as Salesforce/GiftEval is header provenance, never a
@@ -163,20 +163,27 @@ def load_omega(path, allow_fixture=False):
             problems.append(f"row {i}: undeclared variant {row['variant']!r}")
 
         # Omega may be undefined (flat or empty history). It then arrives as
-        # null WITH a reason and is carried through, so selectors defer rather
-        # than reading a stand-in number as a real very-low Omega. A bare null,
-        # a reason without a null, or 0.0 offered as "undefined" are refused.
-        value, reason = row.get("omega"), row.get("omega_undefined_reason")
+        # null WITH an omega_status and is carried through, so selectors defer
+        # rather than reading a stand-in number as a real very-low Omega. A bare
+        # null, a status without a null, or 0.0 offered as "undefined" are
+        # refused.
+        #
+        # Any non-empty status is accepted rather than only the set known today
+        # (empty_history, below_floor, flat_history, nonfinite, near_flat).
+        # manifest-v2 added near_flat and it broke consumers that hardcode the
+        # list, so the statuses actually seen are reported instead, and an
+        # unexpected one shows up in the report rather than failing the load.
+        value, status = row.get("omega"), row.get("omega_status")
         if value is None:
-            if not isinstance(reason, str) or not reason.strip():
+            if not isinstance(status, str) or not status.strip():
                 problems.append(f"row {i}: null omega needs a non-empty "
-                                "omega_undefined_reason")
+                                "omega_status")
         elif isinstance(value, bool) or not isinstance(value, (int, float)):
             problems.append(f"row {i}: omega must be a number or null")
         elif not math.isfinite(value):
             problems.append(f"row {i}: nonfinite omega")
-        elif reason is not None:
-            problems.append(f"row {i}: omega_undefined_reason set on a defined omega")
+        elif status is not None:
+            problems.append(f"row {i}: omega_status set on a defined omega")
         if not _SHA256.match(row["source_sha256"]):
             problems.append(f"row {i}: malformed source_sha256")
         if not 0 <= row["history_start"] < row["history_end"] <= row["origin"]:
@@ -257,14 +264,16 @@ def join_omega(table, job_meta, omega, variant, require_provenance=True):
         _fail("Omega and forecasts name different source repositories", wrong_repository)
 
     omega_by_key = {k: omega["by_source"][k][variant].get("omega") for k in keys}
-    undefined = {k: omega["by_source"][k][variant]["omega_undefined_reason"]
+    undefined = {k: omega["by_source"][k][variant]["omega_status"]
                  for k in keys if omega["by_source"][k][variant].get("omega") is None}
     unused = sorted(set(omega["by_source"]) - keys)
     return omega_by_key, {"provenance_checked_jobs": checked,
                           "unused_omega_sources": len(unused),
                           "source_repository": omega["source_repository"],
                           "undefined_omega": len(undefined),
-                          "undefined_omega_reasons": sorted(set(undefined.values()))}
+                          "undefined_omega_statuses": {
+                              status: sum(1 for v in undefined.values() if v == status)
+                              for status in sorted(set(undefined.values()))}}
 
 
 def validate_naming(pairs, naming, where):
