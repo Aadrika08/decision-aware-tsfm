@@ -34,7 +34,7 @@ COLUMNS: dict[str, str] = {
     "oracle_family": "s",
     "oracle_cost": "f",
     "regret": "f",               # realized_cost - oracle_cost, >= 0
-    "scale": "f",                # mean |y| over test targets (evaluation only, never used to select)
+    "scale": "f",                # series scale: seasonal-naive MAE (season 24) of its history before its first origin (#29 item 7a)
     "scaled_regret": "f",        # regret / scale
     "best_fixed_family": "s",    # one family for the whole (horizon, tau) group, chosen in hindsight
     "best_fixed_cost": "f",

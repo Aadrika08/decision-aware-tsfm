@@ -2,9 +2,10 @@
 
 The bundle: the roster fixture (three classical models and one TSFM, as in the pilot),
 five datasets with three series each, horizons 1 and 24, 15 origins 12 apart (so horizon 24
-has a gap origin), one seed, a workload.json and the role table the #60 code exports
-from it. One series has every horizon-1 target equal to 0, so the engine excludes that
-(series, horizon) for zero scale, as it will for solar at horizon 1 in the real pilot.
+has a gap origin), one seed, a workload.json naming one source file per series (its history
+before the first origin, from which the scale is computed, #29 item 7a) and the role table
+the #60 code exports from it. One series has every horizon-1 target equal to 0, as solar
+has at horizon 1 in the real pilot; its history varies, so it is kept and scored.
 SYNTHETIC: these tests check the wiring, not any research result.
 
 Set PILOT_OTHER_PYTHON to a second interpreter (the team's 3.10 or 3.11) to also check
@@ -32,13 +33,15 @@ from decision_aware_tsfm.analysis.decision.metrics import TAU_GRID
 from decision_aware_tsfm.analysis.decision.pipeline import fit_pool
 from decision_aware_tsfm.analysis.decision.selectors import LeaveOneDatasetOut
 from decision_aware_tsfm.analysis.decision.handoff import read_handoff
+from decision_aware_tsfm.analysis.decision.scale import read_workload_sources
 
+from . import _sources
 from .test_decision_producer import _sha, write_bundle
 
 ORIGINS = [1001 + 12 * k for k in range(15)]
 HORIZONS = (1, 24)
 KEEP_SERIES = ("s0", "s1", "s2")
-ZERO_SERIES = "fx_tie/s1"           # every horizon-1 target is 0: zero scale at horizon 1
+ZERO_SERIES = "fx_tie/s1"           # every horizon-1 target is 0 (mean |y| would be 0 there)
 SHIFT_4096 = 0.03                   # last_4096 Omega = current + 0.03, so the variants differ
 # a series where the families differ gets an Omega between 0.45 and 0.5, so the headline and
 # the 0.5 sensitivity choose differently on it
@@ -46,6 +49,12 @@ BETWEEN = ("fx_tau_flip/s0", 0.47)
 N_BOOT = 20
 REPO = Path(__file__).resolve().parents[3]
 QCOLS = [qcol(t) for t in TAU_GRID]
+
+
+def pilot_history() -> dict:
+    """The fixture's drawn series on the pilot-shaped origins: the history in the sources."""
+    with mock.patch.dict(fixture.HORIZON_ORIGINS, {h: ORIGINS for h in HORIZONS}, clear=True):
+        return fixture.series_values(7)
 
 
 def pilot_frame() -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -82,10 +91,12 @@ def set_omega(root: Path, labels: dict) -> None:
 
 
 def make_bundle(root: Path, fc: pd.DataFrame, omega: pd.DataFrame, with_role_table=True) -> None:
-    write_bundle(root, fixture.to_producer_format(fc, fixture.ROSTER_FAMILY_OF_MODEL))
+    """Bundle, sources/ and workload.json (with source_path and source_sha256) in root."""
+    _, hashes = _sources.write_workload(root, fc, history=pilot_history())
+    write_bundle(root, fixture.to_producer_format(fc, fixture.ROSTER_FAMILY_OF_MODEL),
+                 source_hashes=hashes)
     set_omega(root, dict(zip(omega["series_id"], omega["omega_levels"])))
-    doc = workload_doc(fc)
-    (root / "workload.json").write_text(json.dumps(doc), encoding="utf-8")
+    doc = json.loads((root / "workload.json").read_text(encoding="utf-8"))
     if with_role_table:
         result = rt.build_role_table(rt.workload_origins(doc))
         rt.write_role_table(result, root / "role_table", dict(input="test"))
@@ -185,8 +196,10 @@ class EndToEnd(PilotBundle):
         scores = self.read("tables/representative_scores.csv")
         best = scores[(scores.rule == "best_of_family") & (scores.family == "classical")]
         self.assertEqual(best.loc[best.mean_scaled_loss.idxmin(), "model"], pl["representatives"]["classical"])
-        # the zero-scale unit is counted and left out
-        self.assertEqual(pl["coverage"]["classical"]["n_units_dropped_zero_scale"], 1)
+        # the series whose horizon-1 targets are all 0 has a history scale: nothing is dropped
+        self.assertEqual(pl["coverage"]["classical"]["n_units_dropped_zero_scale"], 0)
+        self.assertEqual(pl["selection"]["scale"], "seasonal_naive_mae_season_24_history_before_first_origin")
+        self.assertEqual(len(pl["input"]["scales_sha256"]), 64)
 
     def test_engine_ran_seven_rules_with_the_chosen_representatives(self):
         s = self.sel()
@@ -197,18 +210,41 @@ class EndToEnd(PilotBundle):
                          {k: [m] for k, m in reps.items()})
         o = s[s.selector == "hindsight_oracle"]
         self.assertTrue((o.regret == 0).all())
-        # 15 series, 2 horizons, 11 taus, less the zero-scale pair
-        self.assertEqual(len(s[s.selector == "always_tsfm"]), (15 * 2 - 1) * 11)
+        # 15 series, 2 horizons, 11 taus: nothing excluded
+        self.assertEqual(len(s[s.selector == "always_tsfm"]), 15 * 2 * 11)
 
-    def test_zero_scale_pair_is_excluded_with_its_reason(self):
-        ex = self.read("engine/excluded_series_horizons.csv")
-        self.assertEqual(ex[["series_id", "horizon"]].values.tolist(), [[ZERO_SERIES, 1]])
-        self.assertTrue(ex.reason.iloc[0].startswith("zero scale"))
+    def test_series_with_all_zero_horizon_1_targets_is_kept_and_scored(self):
+        """Under mean |y| this (series, horizon 1) was dropped; the history scale keeps it."""
+        self.assertEqual(len(self.read("engine/excluded_series_horizons.csv")), 0)
         cov = self.read("tables/role_coverage.csv")
         row = cov[(cov.dataset == "fx_tie") & (cov.horizon == 1)].iloc[0]
         self.assertEqual((row.series, row.series_in_cache, row.series_scored, row.excluded_zero_scale),
-                         (3, 3, 2, 1))
+                         (3, 3, 3, 0))
         self.assertEqual(int(cov.gap.sum()), 15)            # one gap origin per series at horizon 24
+        s = self.sel()
+        z = s[(s.series_id == ZERO_SERIES) & (s.horizon == 1)]
+        self.assertEqual(len(z), 7 * 11)
+        self.assertTrue((z[z.selector != "d_omega"].status == "selected").all())
+        sc = read_workload_sources(self.bundle / "workload.json").scales.set_index("series_id")
+        self.assertTrue(np.isfinite(z.scaled_regret[z.status == "selected"]).all())
+        self.assertTrue((z.scale == sc.loc[ZERO_SERIES, "scale"]).all())
+
+    def test_scale_is_the_history_scale_of_each_series(self):
+        sc = read_workload_sources(self.bundle / "workload.json").scales
+        self.assertEqual(len(sc), 15)
+        self.assertTrue((sc.history_end == ORIGINS[0]).all() and (sc.status == "ok").all())
+        hist = pilot_history()
+        for r in sc.itertuples():
+            h = hist[(r.dataset, r.config, r.series_id)][:ORIGINS[0]]
+            self.assertEqual(r.scale, float(np.mean(np.abs(h[24:] - h[:-24]))))
+        written = self.read("engine/series_scales.csv")
+        np.testing.assert_allclose(written.scale, sc.scale, rtol=1e-15)
+        s = self.sel()
+        m = s.merge(sc[["series_id", "scale"]], on="series_id", suffixes=("", "_series"))
+        self.assertTrue((m.scale == m.scale_series).all())    # one scale per series, every horizon
+        sh = self.manifest["inputs"]["scale_history"]
+        self.assertEqual((sh["series_in_cache"], sh["sources_hash_verified"]), (15, 15))
+        self.assertEqual(self.manifest["settings"]["scale"], sh["kind"])
 
     def test_leave_one_dataset_out_with_three_and_e2_folds_match_the_engine(self):
         d = json.loads((self.out / "engine/threshold_0.45/d_omega.json").read_text(encoding="utf-8"))
@@ -243,7 +279,7 @@ class EndToEnd(PilotBundle):
     def test_column_check_recomputes_every_test_unit(self):
         c = self.manifest["checks"]["column_check"]
         self.assertEqual(c["unmatched"], 0)
-        self.assertEqual(c["units_compared"], (15 * 2 - 1) * 11)
+        self.assertEqual(c["units_compared"], 15 * 2 * 11)
         self.assertLessEqual(c["max_relative_difference"], 1e-10)
 
     def test_bootstrap_intervals_are_written_for_every_rule_but_the_oracle(self):
@@ -265,18 +301,20 @@ class EndToEnd(PilotBundle):
     def test_a_horizon_that_cannot_be_resampled_is_skipped_alone(self):
         forecasts, omega, _, fom = rp.load_bundle(self.bundle, "current")
         reps = self.manifest["settings"]["representatives"]["chosen"]
-        tables = rp.engine_tables(forecasts, omega, reps, fom, "current")
+        scales = read_workload_sources(self.bundle / "workload.json").scales
+        tables = rp.engine_tables(forecasts, omega, reps, fom, "current", scales)
         selection, _ = rp.run_engine(tables, reps, 0.45, 3)
         po = tables["per_origin"]
         # fx_tie keeps one series at horizon 1: the dataset+series resample cannot run there
-        thin = dict(tables, per_origin=po[~((po.series_id == "fx_tie/s2") & (po.horizon == 1))])
+        gone = ["fx_tie/s1", "fx_tie/s2"]
+        thin = dict(tables, per_origin=po[~(po.series_id.isin(gone) & (po.horizon == 1))])
         ci, skipped = rp.delta_intervals(thin, N_BOOT, 0)
         self.assertEqual(sorted(ci.horizon.unique()), [24])
         self.assertEqual(skipped.horizon.tolist(), [1])
         self.assertIn("fewer than", skipped.reason.iloc[0])
         full, _ = rp.delta_intervals(tables, N_BOOT, 0)
         pd.testing.assert_frame_equal(ci, full[full.horizon == 24].reset_index(drop=True))
-        sel = selection[~((selection.series_id == "fx_tie/s2") & (selection.horizon == 1))]
+        sel = selection[~(selection.series_id.isin(gone) & (selection.horizon == 1))]
         rci, rskipped = rp.regret_intervals(thin, sel, N_BOOT, 0)
         self.assertEqual(sorted(rci.horizon.unique()), [24])
         self.assertEqual(sorted(rskipped.selector), sorted(set(rp.SELECTOR_ORDER) - {"hindsight_oracle"}))
@@ -534,7 +572,8 @@ class Internals(PilotBundle):
     def test_engine_roles_that_differ_from_the_table_stop(self):
         forecasts, omega, _, fom = rp.load_bundle(self.bundle, "current")
         reps = self.manifest["settings"]["representatives"]["chosen"]
-        tables = rp.engine_tables(forecasts, omega, reps, fom, "current")
+        scales = read_workload_sources(self.bundle / "workload.json").scales
+        tables = rp.engine_tables(forecasts, omega, reps, fom, "current", scales)
         want = rt.build_role_table(rt.read_workload_origins(self.bundle / "workload.json"))
         self.assertTrue(rp.check_engine_roles(tables, want)["ok"])
         po = tables["per_origin"].copy()
@@ -631,18 +670,19 @@ class RepresentativesSeeOnlyValidation(PilotBundle):
     def test_scrambling_evaluation_forecasts_leaves_the_choice_unchanged(self):
         forecasts, _, _, fom = rp.load_bundle(self.bundle, "current")
         roles = self._roles(forecasts)
-        base, _ = rp.choose_representatives(forecasts, fom, {})
+        sc = read_workload_sources(self.bundle / "workload.json").scales
+        base, _ = rp.choose_representatives(forecasts, fom, {}, sc)
         loser = sorted(m for m, f in fom.items()
                        if f == "classical" and m != base["representatives"]["classical"])[0]
         # the loser becomes a perfect forecaster on every evaluation and gap origin
         scrambled = self._make_perfect(forecasts, loser, roles, ["evaluation", "gap"])
-        after, _ = rp.choose_representatives(scrambled, fom, {})
+        after, _ = rp.choose_representatives(scrambled, fom, {}, sc)
         self.assertNotEqual(after["input"]["sha256"], base["input"]["sha256"])
         self.assertEqual(after["representatives"], base["representatives"])
         self.assertEqual(after["scores"], base["scores"])
         # the same change on validation origins does move the choice, so the test can see a leak
         leaked = self._make_perfect(forecasts, loser, roles, ["validation"])
-        moved, _ = rp.choose_representatives(leaked, fom, {})
+        moved, _ = rp.choose_representatives(leaked, fom, {}, sc)
         self.assertEqual(moved["representatives"]["classical"], loser)
 
 

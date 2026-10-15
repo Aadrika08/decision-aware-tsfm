@@ -550,7 +550,7 @@ def bootstrap_ci(frame: pd.DataFrame, statistic: Callable[[pd.DataFrame], object
 
 # --------------------------------------------------------------------------- cost tables and statistics
 
-COST_COLUMNS = ["pinball_classical", "pinball_tsfm", "abs_y_sum", "n"]
+COST_COLUMNS = ["pinball_classical", "pinball_tsfm", "scale", "n"]
 FIXED_COLUMNS = ["pinball_selected", "pinball_oracle"]
 ORACLE_CHECK_RTOL = 1e-9
 
@@ -561,8 +561,10 @@ def family_cost_table(per_origin: pd.DataFrame, role: str | None = "test") -> pd
     Input: the engine's per_origin table (one row per series, horizon, origin,
     family, tau). Output: one row per (series, horizon, tau, origin) with
     pinball_classical, pinball_tsfm (sums over the window's targets),
-    abs_y_sum and n (number of targets). role selects origins by their role
-    column; None keeps every origin.
+    scale (the series' scale, the engine's per-origin `scale` column: one value
+    per series, from its history before the first origin, #29 item 7a) and n
+    (number of targets). role selects origins by their role column; None keeps
+    every origin.
     """
     d = per_origin if role is None else per_origin[per_origin["role"] == role]
     if d.empty:
@@ -572,7 +574,7 @@ def family_cost_table(per_origin: pd.DataFrame, role: str | None = "test") -> pd
     if w.isna().any().any() or set(w.columns) != {"classical", "tsfm"}:
         raise ValueError("some origins do not have both families")
     w.columns = [f"pinball_{c}" for c in w.columns]
-    meta = d[d["family"] == "classical"].set_index(keys)[["abs_y_sum", "n"]]
+    meta = d[d["family"] == "classical"].set_index(keys)[["scale", "n"]]
     return w.join(meta).reset_index()[keys + COST_COLUMNS]
 
 
@@ -647,10 +649,15 @@ def _unit_means(df: pd.DataFrame, extra=()) -> pd.DataFrame:
     if np.isnan(df[cols].to_numpy(dtype=float)).any():
         raise ValueError("cost table has missing values in " +
                          str([c for c in cols if df[c].isna().any()]))
-    g = df.groupby([BOOT_SERIES, "horizon", "tau"], sort=True)[cols].sum()
+    grp = df.groupby([BOOT_SERIES, "horizon", "tau"], sort=True)
+    g = grp[[c for c in cols if c != "scale"]].sum()
+    # the scale is the series' own, fixed: a resample never recomputes it
+    lo, hi = grp["scale"].min(), grp["scale"].max()
+    if (lo != hi).any():
+        raise ValueError("the scale differs between origins of one unit; it must be one value per series")
     out = pd.DataFrame({"J_classical": g["pinball_classical"] / g["n"],
                         "J_tsfm": g["pinball_tsfm"] / g["n"],
-                        "scale": g["abs_y_sum"] / g["n"]})
+                        "scale": lo})
     for c in extra:
         out[c] = g[c] / g["n"]
     return out.reset_index()

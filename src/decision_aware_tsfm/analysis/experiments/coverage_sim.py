@@ -124,7 +124,7 @@ def make_regret(rng, n_series, n, gap, selector, statistic):
         f = _frame(np.zeros(n), 1, series=f"s{s:02d}").drop(columns="cost")
         f["pinball_classical"] = np.abs(1.0 + 0.3 * rng.standard_normal(n))
         f["pinball_tsfm"] = np.abs(1.0 - gap + 0.3 * rng.standard_normal(n))
-        f["abs_y_sum"], f["n"] = 1.0, 1
+        f["scale"], f["n"] = 1.0, 1
         rows.append(f)
     c = bootstrap.attach_sample_oracle(pd.concat(rows, ignore_index=True))
     c["pinball_selected"] = c["pinball_oracle"] if selector == "samplebest" else c["pinball_classical"]

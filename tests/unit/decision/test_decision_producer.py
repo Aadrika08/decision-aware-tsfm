@@ -21,16 +21,17 @@ from decision_aware_tsfm.analysis.decision.evaluate import run_selectors
 from decision_aware_tsfm.analysis.decision.fixture import (
     FAMILY_OF_MODEL, FIT_ONLY_DATASETS, FIXTURE_STATIC_THRESHOLD, FLAT_FAMILY_OF_MODEL,
     FLAT_REPRESENTATIVES, PRODUCER_SCHEMA, REPRESENTATIVES, flat_fixture_producer,
-    to_producer_format)
+    stated_scales, to_producer_format)
 from decision_aware_tsfm.analysis.decision.handoff import (
     PRODUCER_ARROW_SCHEMA, HandoffError, read_handoff)
 from decision_aware_tsfm.analysis.decision.metrics import TAU_GRID
 from decision_aware_tsfm.analysis.decision.pipeline import OmegaJoinError, build_tables, run
 from decision_aware_tsfm.analysis.decision.run_handoff_check import main as handoff_check
+from decision_aware_tsfm.analysis.decision.scale import attach_scale
 from decision_aware_tsfm.analysis.decision.selectors import (
     AlwaysClassical, AlwaysTSFM, HindsightOracle)
 
-from . import _shared
+from . import _shared, _sources
 
 
 def quiet_check(argv):
@@ -50,7 +51,7 @@ class ProducerIngress(unittest.TestCase):
         """The whole fixture through producer-v1 gives exactly the canonical results."""
         fc, omega, _ = _shared.fixture_data()
         t = build_tables(to_producer_format(fc), PRODUCER_SCHEMA, REPRESENTATIVES, FAMILY_OF_MODEL,
-                         omega, fit_only_datasets=FIT_ONLY_DATASETS)
+                         omega, fit_only_datasets=FIT_ONLY_DATASETS, scales=_shared.scales())
         res, _ = run(t, REPRESENTATIVES, FIXTURE_STATIC_THRESHOLD)
         ref = _shared.results()[0]
         key = ["selector", "dataset", "config", "series_id", "horizon", "tau"]
@@ -63,7 +64,8 @@ class ProducerIngress(unittest.TestCase):
     def test_flat_fixture_costs_are_2tau_and_1_minus_tau(self):
         """y = 10, classical = 8, TSFM = 11 at every quantile (the producer's flat fixture)."""
         t = build_tables(flat_fixture_producer(), PRODUCER_SCHEMA, FLAT_REPRESENTATIVES,
-                         FLAT_FAMILY_OF_MODEL, FLAT_OMEGA, omega_col="omega", val_fraction=0)
+                         FLAT_FAMILY_OF_MODEL, FLAT_OMEGA, omega_col="omega", val_fraction=0,
+                         scales=stated_scales(flat_fixture_producer()))
         test = t["test"].sort_values("tau")
         np.testing.assert_allclose(test.J_classical, 2 * np.array(TAU_GRID), atol=1e-12)
         np.testing.assert_allclose(test.J_tsfm, 1 - np.array(TAU_GRID), atol=1e-12)
@@ -85,7 +87,7 @@ class ProducerIngress(unittest.TestCase):
         fam = fc.groupby("model")["family"].first().to_dict()
         reps = {v: k for k, v in fam.items()}
         po = per_origin_costs(restrict_to_representatives(fc, reps, fam))
-        u = unit_costs(po, None).sort_values("tau")
+        u = unit_costs(attach_scale(po, stated_scales(fc), "test"), None).sort_values("tau")
         np.testing.assert_allclose(u.J_classical, 2 * np.array(TAU_GRID), atol=1e-12)
         np.testing.assert_allclose(u.J_tsfm, 1 - np.array(TAU_GRID), atol=1e-12)
 
@@ -97,7 +99,8 @@ class ProducerIngress(unittest.TestCase):
             med[c] = p[qcol(0.5)]
         def J(frame):
             fc = restrict_to_representatives(load_cache(frame, PRODUCER_SCHEMA), REPRESENTATIVES, FAMILY_OF_MODEL)
-            return unit_costs(per_origin_costs(fc), None).set_index(["series_id", "tau"])["J_tsfm"]
+            po = attach_scale(per_origin_costs(fc), _shared.scales(), "test")
+            return unit_costs(po, None).set_index(["series_id", "tau"])["J_tsfm"]
         a, b = J(p), J(med)
         at = lambda s, tau: s.xs(tau, level="tau")
         np.testing.assert_allclose(at(a, 0.5), at(b, 0.5), atol=1e-12)
@@ -180,7 +183,8 @@ class Seeds(unittest.TestCase):
 
     def _J(self, frame):
         fc = restrict_to_representatives(load_cache(frame, PRODUCER_SCHEMA), REPRESENTATIVES, FAMILY_OF_MODEL)
-        return unit_costs(per_origin_costs(fc), None).set_index(["series_id", "tau"])
+        po = attach_scale(per_origin_costs(fc), _shared.scales(), "test")
+        return unit_costs(po, None).set_index(["series_id", "tau"])
 
     def test_costs_are_averaged_over_seeds(self):
         p0, p1 = self._two_seeds()
@@ -231,7 +235,8 @@ class PerOriginOmega(unittest.TestCase):
 
     def test_uses_omega_at_first_test_origin(self):
         t = build_tables(self.fc, "canonical-v1", REPRESENTATIVES, FAMILY_OF_MODEL, self.omega,
-                         fit_only_datasets=FIT_ONLY_DATASETS, omega_col="omega", omega_variant="last_4096")
+                         fit_only_datasets=FIT_ONLY_DATASETS, omega_col="omega", omega_variant="last_4096",
+                         scales=_shared.scales())
         first_test = (t["per_origin"][t["per_origin"].role == "test"]
                       .groupby(["series_id", "horizon"]).origin.min())
         u = t["units"].drop_duplicates(["series_id", "horizon"]).set_index(["series_id", "horizon"])
@@ -244,28 +249,32 @@ class PerOriginOmega(unittest.TestCase):
     def test_variant_must_be_named(self):
         with self.assertRaisesRegex(OmegaJoinError, "omega_variant"):
             build_tables(self.fc, "canonical-v1", REPRESENTATIVES, FAMILY_OF_MODEL, self.omega,
-                         fit_only_datasets=FIT_ONLY_DATASETS, omega_col="omega")
+                         fit_only_datasets=FIT_ONLY_DATASETS, omega_col="omega", scales=_shared.scales())
 
     def test_variant_without_variant_column_fails(self):
         with self.assertRaisesRegex(OmegaJoinError, "no 'variant' column"):
             build_tables(self.fc, "canonical-v1", REPRESENTATIVES, FAMILY_OF_MODEL,
                          self.omega.drop(columns="variant").drop_duplicates(["series_id", "origin"]),
-                         fit_only_datasets=FIT_ONLY_DATASETS, omega_col="omega", omega_variant="current")
+                         fit_only_datasets=FIT_ONLY_DATASETS, omega_col="omega", omega_variant="current",
+                         scales=_shared.scales())
 
     def test_missing_origin_row_fails(self):
         t = build_tables(self.fc, "canonical-v1", REPRESENTATIVES, FAMILY_OF_MODEL, self.omega,
-                         fit_only_datasets=FIT_ONLY_DATASETS, omega_col="omega", omega_variant="current")
+                         fit_only_datasets=FIT_ONLY_DATASETS, omega_col="omega", omega_variant="current",
+                         scales=_shared.scales())
         d = t["decision_origins"].iloc[0]
         gone = self.omega[~((self.omega.series_id == d.series_id) & (self.omega.origin == d.decision_origin))]
         with self.assertRaisesRegex(OmegaJoinError, "no omega"):
             build_tables(self.fc, "canonical-v1", REPRESENTATIVES, FAMILY_OF_MODEL, gone,
-                         fit_only_datasets=FIT_ONLY_DATASETS, omega_col="omega", omega_variant="current")
+                         fit_only_datasets=FIT_ONLY_DATASETS, omega_col="omega", omega_variant="current",
+                         scales=_shared.scales())
 
     def test_duplicate_omega_key_fails(self):
         dup = pd.concat([self.omega, self.omega.iloc[:1]], ignore_index=True)
         with self.assertRaisesRegex(OmegaJoinError, "duplicate"):
             build_tables(self.fc, "canonical-v1", REPRESENTATIVES, FAMILY_OF_MODEL, dup,
-                         fit_only_datasets=FIT_ONLY_DATASETS, omega_col="omega", omega_variant="current")
+                         fit_only_datasets=FIT_ONLY_DATASETS, omega_col="omega", omega_variant="current",
+                         scales=_shared.scales())
 
 
 # ---- handoff bundles --------------------------------------------------------------
@@ -277,15 +286,19 @@ def _sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
-def write_bundle(root, frame, omega_value=0.5, omega_hash=None, history_end_shift=0, job_meta=True):
+def write_bundle(root, frame, omega_value=0.5, omega_hash=None, history_end_shift=0, job_meta=True,
+                 source_hashes=None):
     """Write a bundle in the producer layout: one parquet per job with job metadata,
-    handoff.json with hashes, omega.json with per-origin rows for two variants."""
+    handoff.json with hashes, omega.json with per-origin rows for two variants.
+    source_hashes: {(dataset, config, series_id): sha256} of real source files (see
+    _sources.write_workload); without it each series gets a made-up hash."""
     root = Path(root)
     hashes, omega_rows = {}, {}
     for job_id, g in frame.groupby("job_id", sort=True):
         g = g.sort_values("step")
         r = g.iloc[0]
-        src_hash = hashlib.sha256(f"{r.dataset}|{r.series_id}".encode()).hexdigest()
+        src_hash = (source_hashes[(r.dataset, r.config, r.series_id)] if source_hashes is not None
+                    else hashlib.sha256(f"{r.dataset}|{r.series_id}".encode()).hexdigest())
         job = dict(job_id=job_id, naming_scheme=NAMING, source_repository=REPO, source_revision="rev1",
                    source_sha256=src_hash, **{k: (int(r[k]) if k in ("origin", "horizon", "seed") else r[k])
                                               for k in ("dataset", "config", "series_id", "model",
@@ -380,8 +393,13 @@ class HandoffBundle(unittest.TestCase):
         with self.assertRaisesRegex(HandoffError, "columns, order or Arrow types"):
             read_handoff(self.root, "current")
 
+    def _bundle_with_sources(self):
+        """The flat bundle plus a workload and source files (history before origin 48)."""
+        _, hashes = _sources.write_workload(self.root, self.frame, y_col="y_true")
+        write_bundle(self.root, self.frame, source_hashes=hashes)
+
     def test_check_command_runs_and_reports(self):
-        write_bundle(self.root, self.frame)
+        self._bundle_with_sources()
         out = Path(self.tmp.name) / "out"
         quiet_check([str(self.root), "--variant", "current", "--classical", "flat-classical",
                        "--tsfm", "flat-tsfm", "--static-threshold", "0.45", "--val-fraction", "0",
@@ -398,7 +416,7 @@ class HandoffBundle(unittest.TestCase):
         self.assertTrue((res[res.selector == "always_tsfm"].status == "selected").all())
 
     def test_check_command_old_fit_scheme(self):
-        write_bundle(self.root, self.frame)
+        self._bundle_with_sources()
         out = Path(self.tmp.name) / "out_old"
         quiet_check([str(self.root), "--variant", "current", "--classical", "flat-classical",
                      "--tsfm", "flat-tsfm", "--static-threshold", "0.45", "--val-fraction", "0",

@@ -839,7 +839,8 @@ def evaluate(frozen: FrozenSpec, tables: dict, allow_held_out: bool = False,
 
 def main(argv=None):
     from ..decision.fixture import (FAMILY_OF_MODEL, FIT_ONLY_DATASETS, FIXTURE_SCHEMA,
-                                    FIXTURE_STATIC_THRESHOLD, REPRESENTATIVES, make_fixture)
+                                    FIXTURE_STATIC_THRESHOLD, REPRESENTATIVES, make_fixture,
+                                    make_fixture_scales)
     from ..decision.pipeline import build_tables
     from . import bootstrap
 
@@ -856,7 +857,7 @@ def main(argv=None):
 
     fc, omega, _ = make_fixture(a.seed)
     tables = build_tables(fc, FIXTURE_SCHEMA, REPRESENTATIVES, FAMILY_OF_MODEL, omega,
-                          fit_only_datasets=FIT_ONLY_DATASETS)
+                          fit_only_datasets=FIT_ONLY_DATASETS, scales=make_fixture_scales(a.seed))
     spec = fit(tables, selector_kind=DOmegaLinearPlaceholder.kind,
                static_threshold=FIXTURE_STATIC_THRESHOLD)
     path = out / f"frozen_{spec.sha256[:12]}.json"      # named by content, so never overwritten

@@ -10,7 +10,7 @@ import numpy as np
 from decision_aware_tsfm.analysis.decision import handoff
 from decision_aware_tsfm.analysis.decision.fixture import (
     FAMILY_OF_MODEL, FIT_ONLY_DATASETS, FIXTURE_SCHEMA, FIXTURE_STATIC_THRESHOLD, PRODUCER_SCHEMA,
-    REPRESENTATIVES, to_producer_format)
+    REPRESENTATIVES, series_values, to_producer_format)
 from decision_aware_tsfm.analysis.decision.handoff import HandoffError, read_handoff
 from decision_aware_tsfm.analysis.decision.metrics import TAU_GRID
 from decision_aware_tsfm.analysis.decision.pipeline import OmegaJoinError, build_tables, run
@@ -18,6 +18,7 @@ from decision_aware_tsfm.analysis.decision.schema import validate_selection_fram
 
 from . import _shared
 from .test_decision_producer import _sha, quiet_check, write_bundle
+from . import _sources
 
 # the producer's vocabulary: omega.compute_omega_checked (data owner) and cache.readiness (#56)
 REASONS = ("empty_history", "below_floor", "flat_history", "nonfinite")
@@ -71,7 +72,8 @@ def drop_row(series_id=SID, origin=DECISION_ORIGIN, variant="current"):
 def _engine(root, variant="current"):
     fc, omega, rep = read_handoff(root, variant)
     t = build_tables(fc, PRODUCER_SCHEMA, REPRESENTATIVES, FAMILY_OF_MODEL, omega,
-                     fit_only_datasets=FIT_ONLY_DATASETS, omega_col="omega", omega_variant=variant)
+                     fit_only_datasets=FIT_ONLY_DATASETS, omega_col="omega", omega_variant=variant,
+                     scales=_shared.scales())
     res, d = run(t, REPRESENTATIVES, FIXTURE_STATIC_THRESHOLD, min_fit_datasets=MIN_FIT_DATASETS)
     return t, res, d, rep
 
@@ -80,7 +82,9 @@ class NullOmegaInBundle(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name) / "bundle"
-        write_bundle(self.root, _frame())
+        frame = _frame()
+        _, hashes = _sources.write_workload(self.root, frame, y_col="y_true", history=series_values(7))
+        write_bundle(self.root, frame, source_hashes=hashes)
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -242,7 +246,8 @@ class NullOmegaInBundle(unittest.TestCase):
         fc, omega, _ = read_handoff(self.root, "current")
         with self.assertRaisesRegex(OmegaJoinError, "exactly 0.0"):
             build_tables(fc, PRODUCER_SCHEMA, REPRESENTATIVES, FAMILY_OF_MODEL, omega,
-                         fit_only_datasets=FIT_ONLY_DATASETS, omega_col="omega", omega_variant="current")
+                         fit_only_datasets=FIT_ONLY_DATASETS, omega_col="omega", omega_variant="current",
+                         scales=_shared.scales())
 
     def test_check_command_reports_the_deferral_and_its_reason(self):
         edit_sidecar(self.root, set_row(omega=None, omega_status="flat_history"))
@@ -286,7 +291,7 @@ class ReasonFromAPerSeriesOmegaTable(unittest.TestCase):
     """The engine without a bundle: the reason column is <omega_col>_status, as in the frozen manifest."""
     def _tables(self, omega):
         return build_tables(_shared.fixture_data()[0], FIXTURE_SCHEMA, REPRESENTATIVES, FAMILY_OF_MODEL,
-                            omega, fit_only_datasets=FIT_ONLY_DATASETS)
+                            omega, fit_only_datasets=FIT_ONLY_DATASETS, scales=_shared.scales())
 
     def _omega(self, with_status):
         om = _shared.fixture_data()[1].copy()

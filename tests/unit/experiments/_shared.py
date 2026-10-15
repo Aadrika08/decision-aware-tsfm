@@ -6,7 +6,7 @@ from functools import lru_cache
 
 from decision_aware_tsfm.analysis.decision.fixture import (
     FAMILY_OF_MODEL, FIT_ONLY_DATASETS, FIXTURE_SCHEMA, FIXTURE_STATIC_THRESHOLD,
-    REPRESENTATIVES, make_fixture)
+    REPRESENTATIVES, make_fixture, make_fixture_scales)
 from decision_aware_tsfm.analysis.decision.pipeline import build_tables, run
 
 FRAME_KEYS = ("per_origin", "units", "val", "test", "n_val", "decision_origins", "fit_units")
@@ -18,10 +18,16 @@ def fixture_data():
 
 
 @lru_cache(maxsize=None)
+def scales():
+    """The fixture's series scale table (history before the first origin, #29 item 7a)."""
+    return make_fixture_scales(seed=7)
+
+
+@lru_cache(maxsize=None)
 def tables():
     fc, omega, _ = fixture_data()
     return build_tables(fc, FIXTURE_SCHEMA, REPRESENTATIVES, FAMILY_OF_MODEL, omega,
-                        fit_only_datasets=FIT_ONLY_DATASETS)
+                        fit_only_datasets=FIT_ONLY_DATASETS, scales=scales())
 
 
 @lru_cache(maxsize=None)
@@ -30,7 +36,7 @@ def tables_without_fit_split():
     Horizon 24 only, which keeps the build short; the settings are the fixture's."""
     fc, omega, _ = fixture_data()
     return build_tables(fc[fc.horizon == 24], FIXTURE_SCHEMA, REPRESENTATIVES, FAMILY_OF_MODEL, omega,
-                        fit_only_datasets=())
+                        fit_only_datasets=(), scales=scales())
 
 
 def cli_patches():
@@ -46,6 +52,8 @@ def cli_patches():
     def fake_build(fc, schema, representatives, family_of_model, omega, **kw):
         assert fc is fixture_data()[0] and omega is fixture_data()[1]
         assert (schema, representatives, family_of_model) == (FIXTURE_SCHEMA, REPRESENTATIVES, FAMILY_OF_MODEL)
+        sc = kw.pop("scales")
+        assert sc.equals(scales()), "the entry point must pass the fixture's scale table"
         assert kw == {"fit_only_datasets": FIT_ONLY_DATASETS}, kw
         return tables()
 
