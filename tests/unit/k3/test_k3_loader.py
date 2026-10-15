@@ -76,13 +76,13 @@ def run(tmp_path, hashes, doc, variant="current", allow_fixture=False):
     return load_k3_inputs(tmp_path, hashes, path, variant, allow_fixture=allow_fixture)
 
 
-def _undefine(series_id, reason="flat history: zero variance"):
-    """Mark one series' Omega undefined, with a reason, in both variants."""
+def _undefine(series_id, status="flat_history"):
+    """Mark one series' Omega undefined, with a status, in both variants."""
     def mutate(doc):
         for row in doc["rows"]:
             if row["series_id"] == series_id:
                 row["omega"] = None
-                row["omega_undefined_reason"] = reason
+                row["omega_status"] = status
     return mutate
 
 
@@ -210,7 +210,7 @@ class RejectionRulesTests(LoaderTestCase):
             for row in doc["rows"]:
                 if row["series_id"] == "s1":
                     row["omega"] = None
-        with self.assertRaisesRegex(K3InputError, "needs a non-empty omega_undefined_reason"):
+        with self.assertRaisesRegex(K3InputError, "needs a non-empty omega_status"):
             run(self.tmp, build_cache(self.tmp), omega_doc(mutate=blank))
 
 
@@ -373,7 +373,7 @@ class AadrikaNamingRepositoryValidation45Tests(LoaderTestCase):
 
 
 class UndefinedOmegaNullWithReasonCarriedThroughForDeferralTests(LoaderTestCase):
-    """undefined Omega: null with a reason, carried through for deferral."""
+    """undefined Omega: null with a status, carried through for deferral."""
 
 
     def test_null_omega_with_reason_is_carried_through(self):
@@ -382,7 +382,7 @@ class UndefinedOmegaNullWithReasonCarriedThroughForDeferralTests(LoaderTestCase)
         self.assertTrue(report["status"] == "ok")
         self.assertIsNone(omega[("synthetic", "hourly", "s1", 5000)])
         self.assertTrue(report["undefined_omega"] == 1)
-        self.assertTrue(report["undefined_omega_reasons"] == ["flat history: zero variance"])
+        self.assertEqual(report["undefined_omega_statuses"], {"flat_history": 1})
 
 
     def test_null_omega_excluded_from_counts_and_bands(self):
@@ -403,13 +403,13 @@ class UndefinedOmegaNullWithReasonCarriedThroughForDeferralTests(LoaderTestCase)
             for row in doc["rows"]:
                 if row["series_id"] == "s1":
                     row["omega"] = 0.0
-                    row["omega_undefined_reason"] = "flat history"
-        with self.assertRaisesRegex(K3InputError, "reason set on a defined omega"):
+                    row["omega_status"] = "flat_history"
+        with self.assertRaisesRegex(K3InputError, "omega_status set on a defined omega"):
             run(self.tmp, build_cache(self.tmp), omega_doc(mutate=zero))
 
 
     def test_blank_reason_rejected(self):
-        with self.assertRaisesRegex(K3InputError, "needs a non-empty omega_undefined_reason"):
+        with self.assertRaisesRegex(K3InputError, "needs a non-empty omega_status"):
             run(self.tmp, build_cache(self.tmp), omega_doc(mutate=_undefine("s1", "   ")))
 
 
@@ -418,16 +418,36 @@ class UndefinedOmegaNullWithReasonCarriedThroughForDeferralTests(LoaderTestCase)
             for row in doc["rows"]:
                 if row["series_id"] == "s1" and row["variant"] == "current":
                     row["omega"] = None
-                    row["omega_undefined_reason"] = "flat history"
+                    row["omega_status"] = "flat_history"
         with self.assertRaisesRegex(K3InputError, "undefined in some variants but not others"):
             run(self.tmp, build_cache(self.tmp), omega_doc(mutate=half))
 
+
+    def test_unknown_status_is_reported_not_rejected(self):
+        """manifest-v2 added near_flat and broke consumers that hardcode the
+        known set, so a status we have not seen before must still load."""
+        _, _, report = run(self.tmp, build_cache(self.tmp),
+                           omega_doc(mutate=_undefine("s1", "near_flat")))
+        self.assertEqual(report["status"], "ok")
+        self.assertEqual(report["undefined_omega_statuses"], {"near_flat": 1})
+
+    def test_statuses_are_counted_per_value(self):
+        def mixed(doc):
+            for row in doc["rows"]:
+                if row["series_id"] in ("s0", "s1"):
+                    row["omega"] = None
+                    row["omega_status"] = ("flat_history" if row["series_id"] == "s0"
+                                           else "empty_history")
+        _, _, report = run(self.tmp, build_cache(self.tmp), omega_doc(mutate=mixed))
+        self.assertEqual(report["undefined_omega"], 2)
+        self.assertEqual(report["undefined_omega_statuses"],
+                         {"empty_history": 1, "flat_history": 1})
 
     def test_all_omega_undefined_reports_empty_range(self):
         def nothing(doc):
             for row in doc["rows"]:
                 row["omega"] = None
-                row["omega_undefined_reason"] = "flat history"
+                row["omega_status"] = "flat_history"
         _, _, report = run(self.tmp, build_cache(self.tmp), omega_doc(mutate=nothing))
         self.assertTrue(report["distinct_omega"] == 0)
         self.assertTrue(report["distinct_datasets"] == 0)
