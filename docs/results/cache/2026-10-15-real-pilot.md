@@ -73,6 +73,23 @@ do not equate them with raw file hashes. The original workload at bundle root
 lets the analysis identify the exact #29 packet; approved inputs document the
 actual generation provenance. The approved execution copy was not moved after planning.
 
+The first slice also passes the unmodified K3 loader at PR #35 head
+`e3b7e17e54e94439fc78a38057273473e6bc7985`, verified against GitHub on October 16
+(IST). Both variants return `ok`: 24 partitions, 1,544 rows, six comparisons,
+all 24 jobs provenance-checked, one series-origin, both seeds and all three horizons.
+The complete sidecar has 903 additional origins unused by this first slice.
+The [K3 report](2026-10-15-real-pilot/k3-first-slice-probe.json) records that scope.
+The [decision-reader/source report](2026-10-15-real-pilot/decision-first-slice-source-probe.json)
+also verifies all eleven quantile columns survive canonical ingress, all 55 staged
+source hashes match, and the 1,544 realised target rows match the source array.
+These are local compatibility checks, not either owner's real-cache acceptance.
+
+The [future full-cache acceptance checklist](2026-10-15-real-pilot/consumer-acceptance.md)
+provides pinned reader commands, expected complete-pilot counts and the owner
+attestation fields. Its full-cache commands remain unexecuted until generation
+and packaging finish. The frozen generation checkout does not contain the newer
+K3 loader; use the separate owner checkout identified in the checklist.
+
 ## Remaining execution and acceptance
 
 The first slice was delivered before starting the approved **21,696-job /
