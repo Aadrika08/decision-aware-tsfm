@@ -97,15 +97,36 @@ These allowances are not observed costs or approval for the full study.
 
 ## Continuation snapshot and operation
 
+**Update after the host interruption:** the original generator and monitor stopped
+at the time of a host `systemd-oomd` kill. Post-interruption audit verified **49
+partitions**, with 21,647 missing and no other audit errors. The 25 additional
+completed-job measurements were recovered from the durable event log and checked
+against partition metadata, preserving their original run ID. Native final reports,
+killed-run total elapsed time and peak RSS remain unavailable.
+
+The [service-resume record](2026-10-15-real-pilot/service-resume.json) supersedes
+the earlier running snapshot below. Generation and monitoring now run as separate
+transient user services outside the terminal cgroup. Each has a 2 GiB memory-high
+threshold, 3 GiB hard RAM limit and 1 GiB swap limit, with `OOMPolicy=stop` and
+automatic restart disabled. Startup required at least 4 GiB available host RAM.
+The resumed generator verified and skipped all 49 saved partitions. No scientific
+settings changed; timing measurements are conditional on these operational guards.
+
+The revised monitor includes the recovered samples exactly once and requires the
+verified sample IDs to equal the full plan. Its eventual successful-job projection
+does not restore unknown killed-attempt costs. It will keep workflow accounting
+explicitly incomplete, and #30 open, even if timing-signature coverage is complete.
+The old supervisor, interrupted logs and original event ledger remain preserved.
+
 The [timestamped continuation record](2026-10-15-real-pilot/continuation.json)
-records the running full pilot and its monitor. A controlled SIGTERM interrupted
+records the earlier running full pilot and its monitor. A controlled SIGTERM interrupted
 the continuation after 24 verified cache hits, before another partition was
 published. Its 196.1125 seconds of canceled attempt time are retained separately
 from successful inference. The partial audit found 24 valid and 21,672 missing
 partitions, with no corruption, unexpected files, duplicates or mismatched actuals.
 The resumed run skipped all 24 existing partitions; their hashes still match.
 
-A detached completion monitor is active in the frozen execution worktree. After
+A completion monitor service is active in the frozen execution worktree. After
 generation, it requires a complete audit, a rerun generating zero jobs, recovery
 of two disposable missing/corrupt copies, and resource accounting before packaging.
 It uploads a draft release, verifies its asset digests, then publishes and requests
@@ -118,12 +139,13 @@ snapshot, not a live counter:
 ```bash
 cd cache/worktrees/real-pilot-29
 cat artifacts/runs/pilot-2026-10-15/completion-status.json
-tail -n 20 artifacts/runs/pilot-2026-10-15/finish-supervisor.log
+systemctl --user status decision-aware-pilot-29-20261015.service decision-aware-pilot-monitor-29-20261015.service --no-pager
+tail -n 20 artifacts/runs/pilot-2026-10-15/service-monitor.log
 ```
 
 Keep this host awake and preserve the execution checkout, inputs and run paths.
-The detached processes survive the terminal session, but do not restart after a
-reboot. If the status is `stopped_on_error`, preserve the reports and investigate
+The services survive the terminal session, but require a running user manager and
+do not restart after a reboot. If the status is `stopped_on_error`, preserve the reports and investigate
 before restarting; do not launch a second generator or edit scientific settings.
 
 #29 remains open until the full audit, recovery/completed-rerun checks and both
