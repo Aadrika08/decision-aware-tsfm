@@ -58,6 +58,10 @@ OMEGA_BANDS = (("below_0.40", -float("inf"), 0.40),
                ("above_0.50", 0.50, float("inf")))
 COMPARISON_KEY = ("dataset", "config", "series_id", "origin", "horizon", "seed")
 CAP = {"last_4096": 4096}
+STATUS_OK = "ok"
+# Datasets held out for the final transfer evaluation. Any name containing one
+# of these is refused before anything is read, as the engine does.
+HELD_OUT = ("m5", "pjm")
 NAMING_V1 = "dataset-config-v1"
 NAMING_LEGACY = "legacy-slash-form"
 NAMINGS = (NAMING_V1, NAMING_LEGACY)
@@ -129,9 +133,19 @@ def load_cache(base_dir, partition_hashes):
 
 
 # ------------------------------------------------------------ omega sidecar
-def load_omega(path, allow_fixture=False):
-    """Parse and validate an Omega sidecar document."""
-    doc = json.loads(Path(path).read_text())
+def load_omega(path, allow_fixture=False, expected_sha256=None):
+    """Parse and validate an Omega sidecar document.
+
+    expected_sha256: the handoff's published `omega_sha256`. Supplied, the file
+    is verified against it before anything is parsed.
+    """
+    path = Path(path)
+    if expected_sha256 is not None:
+        actual = _sha256(path)
+        if actual != str(expected_sha256).lower():
+            _fail("Omega sidecar SHA-256 does not match the published value",
+                  [f"expected {expected_sha256}, got {actual}"])
+    doc = json.loads(path.read_text(encoding="utf-8"))
     if doc.get("schema_version") != 1:
         _fail("Unsupported Omega schema_version", [doc.get("schema_version")])
     if not isinstance(doc.get("fixture"), bool):
@@ -162,28 +176,32 @@ def load_omega(path, allow_fixture=False):
         if row["variant"] not in variants:
             problems.append(f"row {i}: undeclared variant {row['variant']!r}")
 
-        # Omega may be undefined (flat or empty history). It then arrives as
-        # null WITH an omega_status and is carried through, so selectors defer
-        # rather than reading a stand-in number as a real very-low Omega. A bare
-        # null, a status without a null, or 0.0 offered as "undefined" are
-        # refused.
+        # Every row carries omega_status. A defined Omega must be STATUS_OK:
+        # a number sitting under flat_history or near_flat is a stand-in, and
+        # reading it as a real low Omega is exactly the 0.0 problem. An
+        # undefined Omega is null with a status saying why.
         #
-        # Any non-empty status is accepted rather than only the set known today
-        # (empty_history, below_floor, flat_history, nonfinite, near_flat).
-        # manifest-v2 added near_flat and it broke consumers that hardcode the
-        # list, so the statuses actually seen are reported instead, and an
+        # Any non-ok status is accepted on a null rather than only the set
+        # known today (empty_history, below_floor, flat_history, nonfinite,
+        # near_flat). manifest-v2 added near_flat and it broke consumers that
+        # hardcode the list, so the statuses seen are reported instead and an
         # unexpected one shows up in the report rather than failing the load.
         value, status = row.get("omega"), row.get("omega_status")
         if value is None:
             if not isinstance(status, str) or not status.strip():
                 problems.append(f"row {i}: null omega needs a non-empty "
                                 "omega_status")
+            elif status == STATUS_OK:
+                problems.append(f"row {i}: omega_status {STATUS_OK!r} on a null omega")
         elif isinstance(value, bool) or not isinstance(value, (int, float)):
             problems.append(f"row {i}: omega must be a number or null")
         elif not math.isfinite(value):
             problems.append(f"row {i}: nonfinite omega")
-        elif status is not None:
-            problems.append(f"row {i}: omega_status set on a defined omega")
+        elif not 0.0 <= value <= 1.0:
+            problems.append(f"row {i}: omega {value} outside [0, 1]")
+        elif status is not None and status != STATUS_OK:
+            problems.append(f"row {i}: defined omega with status {status!r}; "
+                            f"a defined value must be {STATUS_OK!r}")
         if not _SHA256.match(row["source_sha256"]):
             problems.append(f"row {i}: malformed source_sha256")
         if not 0 <= row["history_start"] < row["history_end"] <= row["origin"]:
@@ -307,6 +325,12 @@ def validate_naming(pairs, naming, where):
         _fail(f"Names do not follow {NAMING_V1}", problems)
 
 
+def _held_out(names):
+    """Any (dataset, config) naming a held-out source, case-insensitive."""
+    return sorted({(d, c) for d, c in names
+                   if any(h in str(d).lower() or h in str(c).lower() for h in HELD_OUT)})
+
+
 def omega_band_coverage(omega_by_key):
     """Per band: how many datasets, series-origins and distinct Omega values."""
     coverage = {}
@@ -332,21 +356,29 @@ def omega_band_coverage(omega_by_key):
 
 # ----------------------------------------------------------- K3 input checks
 def k3_input_checks(table):
-    """Every comparison must contain both families with identical actuals/windows."""
+    """Every comparison must contain both families with identical actuals/windows.
+
+    Actuals are keyed by TARGET POSITION (origin + step - 1), not by window, so
+    a y_true that differs across seeds or across horizons for the same target is
+    caught rather than hidden inside its own window.
+    """
     families, actuals, problems = {}, {}, []
     for row in table.to_pylist():
         key = tuple(row[k] for k in COMPARISON_KEY)
         families.setdefault(key, set()).add(row["family"])
+        # same series, same point in time: one actual, whatever produced it
+        target_key = (row["dataset"], row["config"], row["series_id"],
+                      row["origin"] + row["step"] - 1)
         target = (row["y_true"], row["timestamp"])
-        step_key = key + (row["step"],)
-        if actuals.setdefault(step_key, target) != target:
-            problems.append(step_key)
+        if actuals.setdefault(target_key, target) != target:
+            problems.append(target_key)
 
     incomplete = sorted(k for k, f in families.items() if f != {"classical", "tsfm"})
     if incomplete:
         _fail("Comparisons missing a family", incomplete)
     if problems:
-        _fail("Actuals or timestamps differ across models for the same window", sorted(set(problems)))
+        _fail("Actuals or timestamps differ for the same target position "
+              "(across models, seeds or horizons)", sorted(set(problems)))
 
     models = {}
     for model, family in set(zip(table["model"].to_pylist(), table["family"].to_pylist())):
@@ -364,7 +396,7 @@ def k3_input_checks(table):
 
 # ------------------------------------------------------------------- entry
 def load_k3_inputs(base_dir, partition_hashes, omega_path, variant,
-                   allow_fixture=False, naming=NAMING_V1):
+                   allow_fixture=False, naming=NAMING_V1, omega_sha256=None):
     """Full K3 input path. Returns (table, omega_by_key, report).
 
     report["status"] is "ok" for real inputs and "fixture_valid" when any
@@ -373,12 +405,18 @@ def load_k3_inputs(base_dir, partition_hashes, omega_path, variant,
     table, job_meta, cache_fixture = load_cache(base_dir, partition_hashes)
     if cache_fixture and not allow_fixture:
         _fail("Fixture cache refused; pass allow_fixture=True only for tests")
-    omega = load_omega(omega_path, allow_fixture=allow_fixture)
+    omega = load_omega(omega_path, allow_fixture=allow_fixture,
+                       expected_sha256=omega_sha256)
     is_fixture = cache_fixture or omega["fixture"]
 
-    validate_naming(set(zip(table["dataset"].to_pylist(), table["config"].to_pylist())),
-                    naming, "cache")
-    validate_naming({(k[0], k[1]) for k in omega["by_source"]}, naming, "omega sidecar")
+    cache_names = set(zip(table["dataset"].to_pylist(), table["config"].to_pylist()))
+    omega_names = {(k[0], k[1]) for k in omega["by_source"]}
+    held = _held_out(cache_names | omega_names)
+    if held:
+        _fail("Held-out data refused: M5 and PJM must not reach K3", held)
+
+    validate_naming(cache_names, naming, "cache")
+    validate_naming(omega_names, naming, "omega sidecar")
     omega_by_key, join_report = join_omega(table, job_meta, omega, variant,
                                            require_provenance=not is_fixture)
     checks = k3_input_checks(table)
@@ -390,6 +428,7 @@ def load_k3_inputs(base_dir, partition_hashes, omega_path, variant,
         "status": "fixture_valid" if is_fixture else "ok",
         "provenance_required": not is_fixture,
         "naming": naming,
+        "omega_sha256_verified": omega_sha256 is not None,
         "variant": variant,
         "partitions": len(partition_hashes),
         "rows": len(table),
