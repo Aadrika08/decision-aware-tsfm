@@ -475,13 +475,13 @@ class UndefinedOmega(unittest.TestCase):
     def setUpClass(cls):
         from decision_aware_tsfm.analysis.decision.fixture import (
             FAMILY_OF_MODEL, FIT_ONLY_DATASETS, FIXTURE_SCHEMA, FIXTURE_STATIC_THRESHOLD,
-            REPRESENTATIVES, make_fixture)
+            REPRESENTATIVES, make_fixture, make_fixture_scales)
         from decision_aware_tsfm.analysis.decision.pipeline import build_tables, run
         fc, om, _ = make_fixture(seed=7)
         om = om.copy()
         om.loc[om.series_id == "fx_tsfm_wins/s0", "omega_levels"] = np.nan
         cls.tables = build_tables(fc, FIXTURE_SCHEMA, REPRESENTATIVES, FAMILY_OF_MODEL, om,
-                                  fit_only_datasets=FIT_ONLY_DATASETS)
+                                  fit_only_datasets=FIT_ONLY_DATASETS, scales=make_fixture_scales(7))
         cls.selection, _ = run(cls.tables, REPRESENTATIVES, FIXTURE_STATIC_THRESHOLD)
         cls.out = e1.run_e1(cls.tables, cls.selection)
 

@@ -84,7 +84,7 @@ class CanonicalCacheChecks(unittest.TestCase):
         fc, omega, _ = _shared.fixture_data()
         with self.assertRaisesRegex(ValueError, "no omega"):
             build_tables(fc, FIXTURE_SCHEMA, REPRESENTATIVES, FAMILY_OF_MODEL, omega.iloc[1:],
-                         fit_only_datasets=FIT_ONLY_DATASETS)
+                         fit_only_datasets=FIT_ONLY_DATASETS, scales=_shared.scales())
 
     def test_held_out_dataset_blocked_from_development_pipeline(self):
         for name in ["m5_retail", "PJM_Electricity", "data/M5/daily"]:
@@ -93,7 +93,7 @@ class CanonicalCacheChecks(unittest.TestCase):
                 fc["dataset"] = name
                 with self.assertRaises(HeldOutLeakError):
                     build_tables(fc, FIXTURE_SCHEMA, REPRESENTATIVES, FAMILY_OF_MODEL,
-                                 _shared.fixture_data()[1])
+                                 _shared.fixture_data()[1], scales=_shared.scales())
 
     def test_static_rule_has_no_default_threshold(self):
         with self.assertRaises(TypeError):

@@ -8,7 +8,8 @@ import pandas as pd
 
 from .evaluate import summarize
 from .fixture import (FAMILY_OF_MODEL, FIT_ONLY_DATASETS, FIXTURE_SCHEMA,
-                      FIXTURE_STATIC_THRESHOLD, REPRESENTATIVES, make_fixture)
+                      FIXTURE_STATIC_THRESHOLD, REPRESENTATIVES, make_fixture,
+                      make_fixture_scales)
 from .pipeline import build_tables, run
 
 
@@ -26,9 +27,11 @@ def main():
     fc.to_parquet(out / "fixture_cache.parquet", index=False)
     omega.to_csv(out / "fixture_omega.csv", index=False, lineterminator="\n")
     planted.to_csv(out / "planted_answers.csv", index=False, lineterminator="\n")
+    scales = make_fixture_scales(a.seed)
+    scales.to_csv(out / "fixture_scales.csv", index=False, lineterminator="\n")
 
     tables = build_tables(out / "fixture_cache.parquet", FIXTURE_SCHEMA, REPRESENTATIVES,
-                          FAMILY_OF_MODEL, omega, fit_only_datasets=FIT_ONLY_DATASETS)
+                          FAMILY_OF_MODEL, omega, fit_only_datasets=FIT_ONLY_DATASETS, scales=scales)
     res, d = run(tables, REPRESENTATIVES, FIXTURE_STATIC_THRESHOLD)
     print("D_Omega placeholder, leave-one-dataset-out folds:")
     for ds, fold in d.describe()["folds"].items():

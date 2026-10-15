@@ -15,7 +15,7 @@ from decision_aware_tsfm.analysis.decision.cache_io import qcol
 from decision_aware_tsfm.analysis.decision.costs import ROLES, SERIES_KEYS
 from decision_aware_tsfm.analysis.decision.fixture import (
     FIT_ONLY_DATASETS, FIXTURE_SCHEMA, FLAT_FAMILY_OF_MODEL, FLAT_REPRESENTATIVES, PRODUCER_SCHEMA,
-    to_producer_format)
+    stated_scales, to_producer_format)
 from decision_aware_tsfm.analysis.decision.guards import HeldOutLeakError
 from decision_aware_tsfm.analysis.decision.metrics import TAU_GRID
 from decision_aware_tsfm.analysis.decision.pipeline import build_tables
@@ -511,7 +511,7 @@ class TableEqualsTheEngine(unittest.TestCase):
         frame = flat_cache(series)
         omega = pd.DataFrame([dict(dataset="fx_flat", config="H", series_id=s, omega=0.5) for s in series])
         tables = build_tables(frame, PRODUCER_SCHEMA, FLAT_REPRESENTATIVES, FLAT_FAMILY_OF_MODEL, omega,
-                              omega_col="omega")
+                              omega_col="omega", scales=stated_scales(frame))
         result = rt.build_role_table(rt.workload_origins(workload(origins(series, (24,), "fx_flat"))))
         self.assertEqual(self.assert_same_as_engine(result, tables), 9)
         self.assertEqual(by_horizon(result), {24: (2, 1 + 3, 6 + 6 + 2)})

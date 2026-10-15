@@ -24,7 +24,7 @@ EVAL_DATASETS = ("fx_classical_wins", "fx_tau_flip", "fx_tie", "fx_tsfm_wins")
 def _tables(fc=None, **kw):
     fc, omega, _ = (_shared.fixture_data() if fc is None else (fc, _shared.fixture_data()[1], None))
     return build_tables(fc, FIXTURE_SCHEMA, REPRESENTATIVES, FAMILY_OF_MODEL, omega,
-                        fit_only_datasets=FIT_ONLY_DATASETS, **kw)
+                        fit_only_datasets=FIT_ONLY_DATASETS, scales=_shared.scales(), **kw)
 
 
 class LeaveOneDatasetOutFitting(unittest.TestCase):

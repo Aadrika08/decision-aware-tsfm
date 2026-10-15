@@ -7,6 +7,14 @@ workload the cache was planned from is read from BUNDLE/workload.json, or from
 --workload FILE (Dayson's workload.json). DIR must not exist; the run writes into
 DIR.partial and renames it to DIR only when every step has passed.
 
+The scale that makes costs comparable across series (#29 item 7a) is the
+in-sample seasonal-naive MAE, season 24, of each series' history before its
+first origin in the workload (scale.py). The history is read from the files the
+workload names (source_path, relative to the workload's folder or to --sources
+DIR), each checked against its source_sha256, the hash the bundle's jobs carry,
+and against the cache's realised values. A missing or changed source stops the
+run before anything is written; there is no fallback to another scale.
+
 Steps, in order. Every default is a decision posted on #29 (DECISIONS_REFERENCE):
   1. Load. handoff.read_handoff, exactly as run_handoff_check: every partition hash,
      the producer-v1 columns and types, job provenance, the Omega join for the chosen
@@ -71,6 +79,7 @@ from .representatives import (EvaluationRowsError, best_of_family, fixed_named, 
                               score_table)
 from .run_handoff_check import direct_test_costs
 from .run_role_table import _git_commit, _tree_sha256
+from .scale import SCALE_KIND, check_bundle_against_sources, read_workload_sources, table_sha256
 from .schema import UNIT_KEYS
 
 DECISIONS_REFERENCE = ("https://github.com/Aadrika08/decision-aware-tsfm/issues/29"
@@ -237,23 +246,25 @@ def check_engine_roles(tables: dict, want: rt.RoleTable) -> dict:
 
 # --------------------------------------------------------------------------- step 3: representatives
 
-def choose_representatives(forecasts, family_of_model, source: dict, fixed_classical=None):
+def choose_representatives(forecasts, family_of_model, source: dict, scales, fixed_classical=None):
     """(best_of_family payload, fixed_named payload or None). Validation origins only."""
     best = best_of_family(forecasts, PRODUCER_SCHEMA, family_of_model, val_fraction=VAL_FRACTION,
-                          loss=REPRESENTATIVE_LOSS, source=source)
+                          loss=REPRESENTATIVE_LOSS, source=source, scales=scales)
     fixed = None
     if fixed_classical is not None:
         named = {"classical": fixed_classical, "tsfm": best["representatives"]["tsfm"]}
         fixed = fixed_named(forecasts, PRODUCER_SCHEMA, family_of_model, named,
-                            val_fraction=VAL_FRACTION, loss=REPRESENTATIVE_LOSS, source=source)
+                            val_fraction=VAL_FRACTION, loss=REPRESENTATIVE_LOSS, source=source,
+                            scales=scales)
     return best, fixed
 
 
 # --------------------------------------------------------------------------- step 4: engine
 
-def engine_tables(forecasts, omega, reps, family_of_model, variant):
+def engine_tables(forecasts, omega, reps, family_of_model, variant, scales):
     return build_tables(forecasts, PRODUCER_SCHEMA, reps, family_of_model, omega,
-                        val_fraction=VAL_FRACTION, omega_col="omega", omega_variant=variant)
+                        val_fraction=VAL_FRACTION, omega_col="omega", omega_variant=variant,
+                        scales=scales)
 
 
 def run_engine(tables, reps, threshold, min_fit_datasets, d_omega_builder=None):
@@ -496,7 +507,7 @@ def _source_files(bundle: Path, workload: Path | None, role_table: Path | None):
 
 
 def run_pilot(bundle, out, variant: str = DEFAULT_VARIANT, thresholds=DEFAULT_THRESHOLDS,
-              workload=None, role_table=None, fixed_classical=None,
+              workload=None, role_table=None, fixed_classical=None, sources=None,
               min_fit_datasets: int = MIN_FIT_DATASETS, n_boot: int = 200, boot_seed: int = 0,
               figures: bool = False, d_omega_builder=None,
               e2_selector_kind: str = e2.DOmegaLinearPlaceholder.kind) -> dict:
@@ -518,13 +529,16 @@ def run_pilot(bundle, out, variant: str = DEFAULT_VARIANT, thresholds=DEFAULT_TH
     assert_no_held_out(origins["series_id"].unique(), "pilot run: workload series_id")
     bundle_table = _read_table_input(role_table) if role_table is not None else None
     want, role_report = check_roles(forecasts, origins, bundle_table)
+    # the series scale, from each series' history before its first workload origin (#29 item 7a)
+    src = read_workload_sources(workload, None if sources is None else Path(sources))
+    source_check = check_bundle_against_sources(forecasts, omega, src)
 
     try:
         partial.mkdir(parents=True)
         manifest = _run_steps(partial, bundle, forecasts, omega, report, fom, want, role_report,
                               workload, role_table, variant, thresholds, fixed_classical,
                               min_fit_datasets, n_boot, boot_seed, figures, d_omega_builder,
-                              e2_selector_kind)
+                              e2_selector_kind, src, source_check)
     except BaseException:
         shutil.rmtree(partial, ignore_errors=True)
         raise
@@ -534,7 +548,7 @@ def run_pilot(bundle, out, variant: str = DEFAULT_VARIANT, thresholds=DEFAULT_TH
 
 def _run_steps(out, bundle, forecasts, omega, report, fom, want, role_report, workload, role_table,
                variant, thresholds, fixed_classical, min_fit_datasets, n_boot, boot_seed, figures,
-               d_omega_builder, e2_selector_kind):
+               d_omega_builder, e2_selector_kind, src, source_check):
     head = thresholds[0]
     files_note = {}
     workload_sha = file_sha256(workload)
@@ -551,7 +565,7 @@ def _run_steps(out, bundle, forecasts, omega, report, fom, want, role_report, wo
     source = dict(kind="handoff bundle", fixture=report["fixture"], omega_variant=variant,
                   handoff_sha256=report["handoff_sha256"],
                   partitions_hash_verified=report["partitions_hash_verified"])
-    best, fixed = choose_representatives(forecasts, fom, source, fixed_classical)
+    best, fixed = choose_representatives(forecasts, fom, source, src.scales, fixed_classical)
     freeze(best, out / "representatives" / "representatives.json")
     scores = [score_table(best).assign(rule="best_of_family")]
     if fixed is not None:
@@ -560,8 +574,11 @@ def _run_steps(out, bundle, forecasts, omega, report, fom, want, role_report, wo
     reps = dict(best["representatives"])
 
     # 4: engine, once per threshold on one set of tables
-    tables = engine_tables(forecasts, omega, reps, fom, variant)
+    tables = engine_tables(forecasts, omega, reps, fom, variant, src.scales)
     engine_roles = check_engine_roles(tables, want)
+    cache_series = forecasts[rt.SERIES_KEYS[:3]].drop_duplicates()
+    used_scales = src.scales.merge(cache_series, on=rt.SERIES_KEYS[:3])
+    _csv(used_scales, out / "engine" / "series_scales.csv")
     col = column_check(forecasts, tables, reps)
     runs = []
     for t in thresholds:
@@ -630,7 +647,7 @@ def _run_steps(out, bundle, forecasts, omega, report, fom, want, role_report, wo
     sens = None
     if fixed is not None:
         f_reps = dict(fixed["representatives"])
-        f_tables = engine_tables(forecasts, omega, f_reps, fom, variant)
+        f_tables = engine_tables(forecasts, omega, f_reps, fom, variant, src.scales)
         check_engine_roles(f_tables, want)
         f_res, _ = run_engine(f_tables, f_reps, head, min_fit_datasets, d_omega_builder)
         d = out / "sensitivity" / f"fixed_classical_{_safe(fixed_classical)}"
@@ -646,6 +663,7 @@ def _run_steps(out, bundle, forecasts, omega, report, fom, want, role_report, wo
 
     # 7: summary, environment, manifest
     settings = dict(omega_variant=variant, static_thresholds=thresholds, headline_threshold=head,
+                    scale=SCALE_KIND,
                     val_fraction=VAL_FRACTION, fit_scheme=FIT_SCHEME,
                     min_fit_datasets=min_fit_datasets,
                     representatives=dict(rule="best_of_family", loss=REPRESENTATIVE_LOSS,
@@ -668,12 +686,16 @@ def _run_steps(out, bundle, forecasts, omega, report, fom, want, role_report, wo
                   role_table_from_workload=dict(sha256=role_sha,
                                                 matches_29=role_sha == APPROVED_ROLE_TABLE_SHA256),
                   bundle_role_table=(None if role_table is None else
-                                     dict(name=role_table.name, sha256=_tree_sha256(role_table))))
+                                     dict(name=role_table.name, sha256=_tree_sha256(role_table))),
+                  scale_history=dict(src.report, series_in_cache=int(len(used_scales)),
+                                     series_scales_sha256=table_sha256(used_scales),
+                                     **source_check))
     _json(dict(python=platform.python_version(), implementation=platform.python_implementation(),
                numpy=np.__version__, pandas=pd.__version__, pyarrow=pyarrow.__version__,
                scipy=scipy.__version__),
           out / ENVIRONMENT_FILE)
     facts = dict(report=report, role=role_report, engine_roles=engine_roles, column_check=col,
+                 scales=used_scales,
                  tables=tables, runs=runs, best=best, fixed=fixed, coverage=coverage,
                  fold_check=fold_check, delta_ci_status=delta_ci_status, reg_ci=reg_ci,
                  reg_skipped=reg_skipped, figure_status=figure_status, settings=settings,
@@ -684,7 +706,8 @@ def _run_steps(out, bundle, forecasts, omega, report, fom, want, role_report, wo
     manifest = dict(command="python -m decision_aware_tsfm.analysis.decision.run_pilot",
                     decisions_reference=DECISIONS_REFERENCE, inputs=inputs, settings=settings,
                     code=dict(git_commit=commit, code_sha256=code_sha, code_files=code_files),
-                    checks=dict(roles=role_report, engine_roles=engine_roles, column_check=col),
+                    checks=dict(roles=role_report, engine_roles=engine_roles, column_check=col,
+                                scale_sources=source_check),
                     environment_file=ENVIRONMENT_FILE, files=files)
     _json(manifest, out / MANIFEST_FILE)
     return manifest
@@ -720,6 +743,12 @@ def _summary(f: dict) -> str:
           f"- Role table built from the workload: role_table.csv sha256 "
           f"`{i['role_table_from_workload']['sha256']}`; the one named on #29: "
           f"{'yes' if i['role_table_from_workload']['matches_29'] else 'NO'}.",
+          f"- Scale (#29 item 7a): seasonal-naive MAE, season 24, of each series' history before "
+          f"its first workload origin; {i['scale_history']['sources_hash_verified']} source files "
+          f"hash-checked, {i['scale_history']['target_rows_checked']} realised values equal to their "
+          f"source. Per series in `engine/series_scales.csv`" + (
+              "." if not f["scales"]["scale"].isna().any() else
+              f"; {int(f['scales']['scale'].isna().sum())} series without a usable scale."),
           "- Role table carried by the bundle: " + (
               "none" if i["bundle_role_table"] is None else
               f"`{i['bundle_role_table']['name']}`, agrees with the workload on every row."), "",
@@ -785,6 +814,7 @@ def _summary(f: dict) -> str:
         ("representatives/", "the frozen representative choice"),
         ("engine/threshold_*/", "selection results of the seven rules and the D_Omega folds"),
         ("engine/excluded_series_horizons.csv", "excluded pairs with the reason"),
+        ("engine/series_scales.csv", "the scale of every series in the cache, with its history window"),
         ("engine/undefined_omega.csv", "decisions with undefined Omega and the reason"),
         ("e1/decision_map.csv", "per unit Omega, tau and Delta; source of the decision-map figure"),
         ("e1/", "E1 summaries, symmetry table, mean Delta intervals"),
@@ -811,6 +841,9 @@ def main(argv=None):
     ap.add_argument("--static-thresholds", type=float, nargs="+", default=list(DEFAULT_THRESHOLDS),
                     help="static Omega thresholds; the first is the headline")
     ap.add_argument("--workload", type=Path, help="workload.json (default BUNDLE/workload.json)")
+    ap.add_argument("--sources", type=Path,
+                    help="folder the workload's source_path entries are relative to "
+                         "(default: the workload's folder)")
     ap.add_argument("--role-table", type=Path,
                     help="role table CSV or export directory to check (default: one in the bundle)")
     ap.add_argument("--fixed-classical", help="also run the fixed-named sensitivity with this model")
@@ -822,6 +855,7 @@ def main(argv=None):
     try:
         m = run_pilot(a.bundle, a.out, variant=a.variant, thresholds=a.static_thresholds,
                       workload=a.workload, role_table=a.role_table, fixed_classical=a.fixed_classical,
+                      sources=a.sources,
                       min_fit_datasets=a.min_fit_datasets, n_boot=a.n_boot, boot_seed=a.boot_seed,
                       figures=a.figures)
     except (PilotRunError, HandoffError, CacheError, rt.RoleTableError, HeldOutLeakError,

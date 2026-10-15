@@ -75,16 +75,25 @@ def unit_costs(po: pd.DataFrame, role: str | None) -> pd.DataFrame:
     """Aggregate to one row per unit (series, horizon, tau), both families side by side.
 
     role=None aggregates every origin (used only for datasets set aside to fit a selector).
+
+    scale is the series' scale carried on every per-origin row (scale.attach_scale: the
+    seasonal-naive MAE, season 24, of the history before the series' first origin, #29
+    item 7a). It is the same for every role, horizon and tau of a series; it is never
+    computed from the targets here.
     """
+    if "scale" not in po.columns:
+        raise ValueError("per-origin rows carry no 'scale' column; attach the series scale with "
+                         "scale.attach_scale first (pipeline.build_tables does)")
     d = po if role is None else po[po["role"] == role]
     keys = SERIES_KEYS + ["tau"]
     a = d.groupby(keys + ["family"]).agg(
         pinball_sum=("pinball_sum", "sum"), crps_sum=("crps_sum", "sum"),
-        abs_y_sum=("abs_y_sum", "sum"), n=("n", "sum"),
-        n_origins=("origin", "nunique")).reset_index()
+        scale=("scale", "first"), scale_lo=("scale", "min"), scale_hi=("scale", "max"),
+        n=("n", "sum"), n_origins=("origin", "nunique")).reset_index()
+    if (a["scale_lo"] != a["scale_hi"]).any():
+        raise ValueError("the scale differs between origins of one unit; it must be one value per series")
     a["J"] = a.pinball_sum / a.n
     a["C"] = a.crps_sum / a.n
-    a["scale"] = a.abs_y_sum / a.n
     cols = keys + [f"{m}_{f}" for m in ("J", "crps") for f in FAMILIES] + ["scale", "n_origins", "n"]
     if a.empty:
         # e.g. no series has any validation origin: return the full column set, zero rows,

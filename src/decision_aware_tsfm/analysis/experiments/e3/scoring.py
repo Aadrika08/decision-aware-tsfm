@@ -30,6 +30,7 @@ from scipy import integrate, stats
 
 from decision_aware_tsfm.analysis.decision.metrics import TAU_GRID
 from decision_aware_tsfm.analysis.decision.pipeline import build_tables
+from decision_aware_tsfm.analysis.decision.scale import scale_row, scale_table
 from decision_aware_tsfm.analysis.decision.selectors import argmin_family
 
 from .design import (F_VARIANTS, FAMILY_SLOT, MEMBERS, MODEL_G, N_CONTEXT, OMEGA_MATCH_COLUMN,
@@ -41,14 +42,17 @@ WINNER_OF_SLOT = {FAMILY_SLOT["G"]: "G", FAMILY_SLOT["F"]: "F"}
 SERIES_COLS = ["series_id", "structure", "seed", "member", "member_role"]
 
 
-def engine_unit_costs(frame: pd.DataFrame, omega: pd.DataFrame, f_model: str) -> pd.DataFrame:
+def engine_unit_costs(frame: pd.DataFrame, omega: pd.DataFrame, f_model: str,
+                      scales: pd.DataFrame) -> pd.DataFrame:
     """Run the engine on a canonical-v1 frame holding G and one F model.
     Every origin is a test origin (val_fraction = 0): nothing is selected or
-    fitted, so no validation split is needed. Returns one row per (series, tau)."""
+    fitted, so no validation split is needed. scales is the series scale table
+    (context_scales). Returns one row per (series, tau)."""
     reps = {FAMILY_SLOT["G"]: MODEL_G, FAMILY_SLOT["F"]: f_model}
     fam = {MODEL_G: FAMILY_SLOT["G"], f_model: FAMILY_SLOT["F"]}
     sub = frame[frame["model"].isin([MODEL_G, f_model])]
-    tb = build_tables(sub, SCHEMA, reps, fam, omega, val_fraction=0.0, omega_col=OMEGA_MATCH_COLUMN)
+    tb = build_tables(sub, SCHEMA, reps, fam, omega, val_fraction=0.0, omega_col=OMEGA_MATCH_COLUMN,
+                      scales=scales)
     keys = ["dataset", "config", "series_id", "horizon"]
     u = tb["test"].merge(tb["units"], on=keys + ["tau"], validate="1:1")
     u = u.merge(tb["decision_origins"], on=keys, validate="m:1")
@@ -59,11 +63,19 @@ def engine_unit_costs(frame: pd.DataFrame, omega: pd.DataFrame, f_model: str) ->
         "n_test_origins": u["n_origins"].astype("int64"),
         "decision_origin": u["decision_origin"].astype("int64")})
     out["delta"] = out["J_F"] - out["J_G"]
-    out["delta_scaled"] = out["delta"] / out["scale"]          # relative to mean |y| on test targets
+    out["delta_scaled"] = out["delta"] / out["scale"]          # relative to the series' context scale
     out["delta_rel"] = out["delta"] / out["J_G"]               # relative to G's own cost
     slot = argmin_family(out["J_G"].to_numpy(), out["J_F"].to_numpy())
     out["winner"] = [WINNER_OF_SLOT[s] for s in slot]
     return out
+
+
+def context_scales(values_by_series: dict, series_rows: pd.DataFrame) -> pd.DataFrame:
+    """The engine's series scale (decision.scale: seasonal-naive MAE, season 24, #29
+    item 7a) on each series' context, positions 0 .. n_context - 1, which ends at the
+    first test origin. It only rescales delta_scaled; the winner uses raw costs."""
+    return scale_table(scale_row((r.dataset, r.config, r.series_id), values_by_series[r.series_id],
+                                 int(r.n_context)) for r in series_rows.itertuples())
 
 
 def score_dataset(values: pd.DataFrame, series_table: pd.DataFrame, variants=None) -> pd.DataFrame:
@@ -80,8 +92,9 @@ def score_dataset(values: pd.DataFrame, series_table: pd.DataFrame, variants=Non
             raise ValueError("scoring expects the design context length")
         frame = group_frame(by_series, g, models)
         omega = g[["dataset", "config", "series_id", OMEGA_MATCH_COLUMN]]
+        scales = context_scales(by_series, g)
         for v in variants:
-            u = engine_unit_costs(frame, omega, F_VARIANTS[v].model)
+            u = engine_unit_costs(frame, omega, F_VARIANTS[v].model, scales)
             if (u["decision_origin"] != N_CONTEXT).any():
                 raise ValueError("decision origin is not the first position after the Omega window")
             u.insert(0, "variant", v)

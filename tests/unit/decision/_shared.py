@@ -7,7 +7,7 @@ from functools import lru_cache
 
 from decision_aware_tsfm.analysis.decision.fixture import (
     FAMILY_OF_MODEL, FIT_ONLY_DATASETS, FIXTURE_SCHEMA, FIXTURE_STATIC_THRESHOLD,
-    REPRESENTATIVES, make_fixture)
+    REPRESENTATIVES, make_fixture, make_fixture_scales)
 from decision_aware_tsfm.analysis.decision.pipeline import build_tables, run
 
 
@@ -17,10 +17,16 @@ def fixture_data():
 
 
 @lru_cache(maxsize=None)
+def scales():
+    """The fixture's series scale table (history before the first origin, #29 item 7a)."""
+    return make_fixture_scales(seed=7)
+
+
+@lru_cache(maxsize=None)
 def tables():
     fc, omega, _ = fixture_data()
     return build_tables(fc, FIXTURE_SCHEMA, REPRESENTATIVES, FAMILY_OF_MODEL, omega,
-                        fit_only_datasets=FIT_ONLY_DATASETS)
+                        fit_only_datasets=FIT_ONLY_DATASETS, scales=scales())
 
 
 @lru_cache(maxsize=None)

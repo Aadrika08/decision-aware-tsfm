@@ -47,8 +47,9 @@ def _blocks(idx, L):
 
 
 def _costs(rows):
-    """rows: (series, origin, pinball_classical, pinball_tsfm, abs_y). One target per origin."""
-    d = pd.DataFrame(rows, columns=["series_id", "origin", "pinball_classical", "pinball_tsfm", "abs_y_sum"])
+    """rows: (series, origin, pinball_classical, pinball_tsfm, scale). One target per origin;
+    the scale is the series' own and must be the same at every origin of a series."""
+    d = pd.DataFrame(rows, columns=["series_id", "origin", "pinball_classical", "pinball_tsfm", "scale"])
     d.insert(0, "config", "c")
     d.insert(0, "dataset", "hand")
     d["horizon"], d["tau"], d["n"] = 1, 0.5, 1
@@ -560,7 +561,7 @@ class RegretStatistics(unittest.TestCase):
             a, b = 1 + 0.3 * rng.standard_normal(40), 1 + 0.3 * rng.standard_normal(40)
             rows.append(pd.DataFrame(dict(dataset="d", config="c", series_id=f"s{s:02d}", horizon=1,
                                           tau=0.5, origin=np.arange(40), pinball_classical=np.abs(a),
-                                          pinball_tsfm=np.abs(b), abs_y_sum=1.0, n=1)))
+                                          pinball_tsfm=np.abs(b), scale=1.0, n=1)))
         return bs.attach_sample_oracle(pd.concat(rows, ignore_index=True))
 
     def test_default_interval_contains_the_estimate_on_the_reviewer_construction(self):

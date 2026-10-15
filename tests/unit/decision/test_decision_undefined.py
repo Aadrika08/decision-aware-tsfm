@@ -9,6 +9,7 @@ from decision_aware_tsfm.analysis.decision.fixture import (
 from decision_aware_tsfm.analysis.decision.metrics import TAU_GRID
 from decision_aware_tsfm.analysis.decision.pipeline import (
     ZERO_SCALE_REASON, OmegaJoinError, build_tables, run)
+from decision_aware_tsfm.analysis.decision.scale import scale_row
 from decision_aware_tsfm.analysis.decision.schema import validate_selection_frame
 
 from . import _shared
@@ -20,6 +21,7 @@ OTHERS = ("always_classical", "always_tsfm", "pinball_validation", "crps_validat
 
 def _tables(omega, fc=None, **kw):
     fc = _shared.fixture_data()[0] if fc is None else fc
+    kw.setdefault("scales", _shared.scales())
     return build_tables(fc, FIXTURE_SCHEMA, REPRESENTATIVES, FAMILY_OF_MODEL, omega,
                         fit_only_datasets=FIT_ONLY_DATASETS, **kw)
 
@@ -84,17 +86,30 @@ class UndefinedOmega(unittest.TestCase):
 
 
 class ZeroScale(unittest.TestCase):
+    """A series that is 0 everywhere, history included: its seasonal-naive MAE is 0 (#29 item 7a)."""
     def _flat_zero(self, sid):
         fc = _shared.fixture_data()[0].copy()
         fc.loc[fc.series_id == sid, "y"] = 0.0
-        return fc
+        sc = _shared.scales().copy()
+        row = sc.index[sc.series_id == sid][0]
+        flat = scale_row(tuple(sc.loc[row, ["dataset", "config", "series_id"]]), np.zeros(2000),
+                         int(sc.loc[row, "history_end"]))
+        for k, v in flat.items():
+            sc.loc[row, k] = v
+        return dict(fc=fc, scales=sc)
+
+    def test_all_zero_targets_alone_no_longer_exclude_a_series(self):
+        fc = self._flat_zero("fx_tie/s0")["fc"]
+        t = _tables(_shared.fixture_data()[1], fc=fc)          # the history scale is still positive
+        self.assertEqual(len(t["excluded_series_horizons"]), 0)
+        self.assertIn("fx_tie/s0", set(t["units"].series_id))
 
     def test_all_zero_series_is_excluded_with_a_reason(self):
-        t = _tables(_shared.fixture_data()[1], fc=self._flat_zero("fx_tie/s0"))
+        t = _tables(_shared.fixture_data()[1], **self._flat_zero("fx_tie/s0"))
         ex = t["excluded_series_horizons"]
         self.assertEqual(sorted(ex.horizon.tolist()), [1, 24])
         self.assertTrue((ex.series_id == "fx_tie/s0").all())
-        self.assertTrue((ex.reason == ZERO_SCALE_REASON).all())
+        self.assertTrue((ex.reason == ZERO_SCALE_REASON + " (zero_seasonal_naive_mae)").all())
         self.assertTrue((ex.used_for == "evaluation").all())
         for name in ("units", "test", "val", "per_origin"):
             self.assertNotIn("fx_tie/s0", set(t[name].series_id), name)
@@ -104,7 +119,7 @@ class ZeroScale(unittest.TestCase):
         self.assertEqual(res.series_id.nunique(), _shared.results()[0].series_id.nunique() - 1)
 
     def test_all_zero_fit_series_is_excluded_from_the_fit(self):
-        t = _tables(_shared.fixture_data()[1], fc=self._flat_zero("fx_dfit/s0"))
+        t = _tables(_shared.fixture_data()[1], **self._flat_zero("fx_dfit/s0"))
         ex = t["excluded_series_horizons"]
         self.assertTrue((ex.used_for == "fit").all())
         self.assertNotIn("fx_dfit/s0", set(t["fit_units"].series_id))

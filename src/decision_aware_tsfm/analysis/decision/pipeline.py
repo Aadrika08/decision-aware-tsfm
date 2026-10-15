@@ -9,6 +9,7 @@ from .costs import SERIES_KEYS, assign_roles, n_origins_by_role, per_origin_cost
 from .evaluate import run_selectors
 from .guards import assert_no_held_out
 from .metrics import TAU_GRID
+from .scale import SCALE_KIND, ScaleError, attach_scale, MISSING_SCALES
 from .schema import UNIT_KEYS
 from .selectors import (FIT_POOL_COLUMNS, AlwaysClassical, AlwaysTSFM, CRPSValidation, DOmegaLinear,
                         HindsightOracle, LeaveOneDatasetOut, NotFitted, PinballValidation,
@@ -114,22 +115,23 @@ def _decision_origins(po: pd.DataFrame, role: str | None) -> pd.DataFrame:
     return (d.groupby(SERIES_KEYS)["origin"].min().rename("decision_origin").reset_index())
 
 
-ZERO_SCALE_REASON = "zero scale: every realised target in the scored period is 0, so scaled cost is undefined"
+ZERO_SCALE_REASON = ("zero scale: the seasonal-naive MAE (season 24) of the series' history before "
+                     "its first origin is 0 or undefined, so scaled cost is undefined")
 
 
-def _drop_zero_scale(po: pd.DataFrame, role: str | None) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Remove (series, horizon) groups whose mean |y| over the scored origins is 0.
+def _drop_zero_scale(po: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Remove (series, horizon) groups whose series scale cannot be divided by (0, or no
+    finite seasonal pair in the history; scale.attach_scale put NaN and a status there).
 
-    Scaled cost divides by that mean, so it is undefined there. The groups are
-    returned separately with a reason; they are never dropped silently."""
-    d = po if role is None else po[po["role"] == role]
-    tot = d.groupby(SERIES_KEYS)["abs_y_sum"].sum()
-    bad = tot[tot <= 0].index
-    if len(bad) == 0:
-        return po, pd.DataFrame(columns=SERIES_KEYS + ["reason"])
-    idx = pd.MultiIndex.from_frame(po[SERIES_KEYS])
-    excluded = bad.to_frame(index=False).assign(reason=ZERO_SCALE_REASON)
-    return po[~idx.isin(bad)].copy(), excluded
+    The groups are returned separately with the reason and the status; they are never
+    dropped silently. The scale is per series, so every horizon of such a series goes."""
+    bad = po["scale"].isna()
+    if not bad.any():
+        return po.drop(columns="scale_status"), pd.DataFrame(columns=SERIES_KEYS + ["reason"])
+    excluded = (po.loc[bad, SERIES_KEYS + ["scale_status"]].drop_duplicates()
+                .sort_values(SERIES_KEYS).reset_index(drop=True))
+    excluded = excluded.assign(reason=ZERO_SCALE_REASON + " (" + excluded["scale_status"].astype(str) + ")")
+    return po[~bad].drop(columns="scale_status").copy(), excluded[SERIES_KEYS + ["reason"]]
 
 
 NO_VALIDATION_REASON = ("no validation origins: the earliest-third validation window is empty "
@@ -155,21 +157,32 @@ def _drop_without_validation(po: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFra
 def build_tables(forecasts, schema_version, representatives, family_of_model, omega,
                  fit_only_datasets=(), val_fraction=1 / 3, taus=TAU_GRID, crps_method="trapezoid",
                  omega_col="omega_levels", omega_variant=None, allow_zero_omega=False,
-                 exclude_without_validation=None):
+                 exclude_without_validation=None, scales=None):
     """exclude_without_validation: drop (series, horizon) groups with an empty
     validation third, recording the reason. None (default) means: do so whenever
     val_fraction > 0. With val_fraction = 0 the caller has chosen to have no
-    validation at all, so nothing is excluded for that reason."""
+    validation at all, so nothing is excluded for that reason.
+
+    scales: the series scale table (scale.SCALE_COLUMNS; scale.read_workload_sources
+    or scale.scale_table). Required: every series in the cache needs a row whose
+    history ends no later than the series' first origin. A series whose scale is 0 or
+    undefined is excluded with the reason. There is no default and no fallback."""
     if exclude_without_validation is None:
         exclude_without_validation = val_fraction > 0
     fc = load_cache(forecasts, schema_version, taus)
     assert_no_held_out(fc["dataset"], "development pipeline")
     assert_no_held_out(fc["config"], "development pipeline")
+    if scales is None:
+        raise ScaleError(MISSING_SCALES)
+    # every series of the cache needs its scale, checked on all origins before any are dropped
+    attach_scale(fc[SERIES_ID_KEYS + ["origin"]].drop_duplicates(), scales, "decision engine")
     fc = restrict_to_representatives(fc, representatives, family_of_model)
-    po = per_origin_costs(fc, taus, crps_method)
+    po = attach_scale(per_origin_costs(fc, taus, crps_method), scales, "decision engine")
+    series_scales = (po[SERIES_ID_KEYS + ["scale", "scale_status"]].drop_duplicates()
+                     .sort_values(SERIES_ID_KEYS).reset_index(drop=True))
 
     fit_mask = po.dataset.isin(fit_only_datasets)
-    fit_po, fit_excluded = _drop_zero_scale(po[fit_mask], None)
+    fit_po, fit_excluded = _drop_zero_scale(po[fit_mask])
     # fit-only datasets: every origin is used for fitting, so the choice is made before the first one
     fit_om, fit_undefined = _split_undefined(
         attach_omega(_decision_origins(fit_po, None), omega, omega_col, omega_variant, allow_zero_omega), "fit")
@@ -180,7 +193,7 @@ def build_tables(forecasts, schema_version, representatives, family_of_model, om
     no_val = pd.DataFrame(columns=SERIES_KEYS + ["reason"])
     if exclude_without_validation:
         ev, no_val = _drop_without_validation(ev)
-    ev, ev_excluded = _drop_zero_scale(ev, "test")
+    ev, ev_excluded = _drop_zero_scale(ev)
     ev_excluded = pd.concat([no_val, ev_excluded], ignore_index=True)
     val = unit_costs(ev, "validation")
     test = unit_costs(ev, "test")
@@ -197,7 +210,8 @@ def build_tables(forecasts, schema_version, representatives, family_of_model, om
                     fit_only_datasets=tuple(sorted(fit_only_datasets)),
                     models_scored=tuple(sorted(po["model"].unique().tolist())),
                     allow_zero_omega=bool(allow_zero_omega),
-                    exclude_without_validation=bool(exclude_without_validation))
+                    exclude_without_validation=bool(exclude_without_validation),
+                    scale=SCALE_KIND)
     excluded = pd.concat([ev_excluded.assign(used_for="evaluation"),
                           fit_excluded.assign(used_for="fit")], ignore_index=True)
     return dict(per_origin=ev, fit_units=fit_units,
@@ -206,7 +220,7 @@ def build_tables(forecasts, schema_version, representatives, family_of_model, om
                 n_val=n_origins_by_role(ev, "validation"),
                 n_targets_dropped_missing_y=fc.attrs.get("n_targets_dropped_missing_y", 0),
                 omega_variant=omega_variant, settings=settings,
-                excluded_series_horizons=excluded,
+                excluded_series_horizons=excluded, series_scales=series_scales,
                 n_units_undefined_omega=int(units["omega"].isna().sum()),
                 undefined_omega=pd.concat([ev_undefined, fit_undefined], ignore_index=True))
 

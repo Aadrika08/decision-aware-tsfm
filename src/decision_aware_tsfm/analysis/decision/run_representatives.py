@@ -11,6 +11,10 @@ family column.
     --rule fixed_named --classical MODEL --tsfm MODEL    name the representatives
     --loss raw                                           average unscaled loss
     --fixture                                            the SYNTHETIC roster fixture
+    --workload FILE --sources DIR                        where each series' history is (the
+                                                         scale, #29 item 7a); default
+                                                         BUNDLE/workload.json, sources
+                                                         relative to the workload's folder
 
 Only validation origins are scored (representatives.py). Run again with the
 same input and --out, the command reproduces the file and leaves it alone; a
@@ -23,10 +27,12 @@ from pathlib import Path
 
 import pandas as pd
 
-from .fixture import FIXTURE_SCHEMA, PRODUCER_SCHEMA, ROSTER_FAMILY_OF_MODEL, make_roster_fixture
+from .fixture import (FIXTURE_SCHEMA, PRODUCER_SCHEMA, ROSTER_FAMILY_OF_MODEL, make_fixture_scales,
+                      make_roster_fixture)
 from .handoff import read_handoff
 from .representatives import (LOSSES, RULES, best_of_family, content_sha256, fixed_named, freeze,
                               load_frozen, score_table)
+from .scale import read_workload_sources
 
 
 def main(argv=None):
@@ -40,6 +46,10 @@ def main(argv=None):
     ap.add_argument("--tsfm", help="TSFM representative (fixed_named only)")
     ap.add_argument("--loss", choices=LOSSES, default="scaled")
     ap.add_argument("--val-fraction", type=float, default=1 / 3)
+    ap.add_argument("--workload", type=Path, help="workload.json naming each series' source "
+                    "(default: workload.json in the bundle or cache directory)")
+    ap.add_argument("--sources", type=Path, help="folder the workload's source_path entries are "
+                    "relative to (default: the workload's folder)")
     ap.add_argument("--out", type=Path, required=True, help="the frozen JSON file to write")
     a = ap.parse_args(argv)
     if a.fixture == (a.cache is not None):
@@ -53,6 +63,7 @@ def main(argv=None):
 
     if a.fixture:
         forecasts, _ = make_roster_fixture(a.seed)
+        scales = make_fixture_scales(a.seed)
         schema, family_of_model = FIXTURE_SCHEMA, ROSTER_FAMILY_OF_MODEL
         source = dict(kind="synthetic roster fixture", fixture=True, seed=a.seed)
     else:
@@ -70,8 +81,10 @@ def main(argv=None):
             raise SystemExit("the cache has no family column; a producer-v1 cache labels every model")
         schema = PRODUCER_SCHEMA
         family_of_model = forecasts.groupby("model")["family"].first().to_dict()
+        workload = a.workload or (a.cache if a.cache.is_dir() else a.cache.parent) / "workload.json"
+        scales = read_workload_sources(workload, a.sources).scales
 
-    kw = dict(val_fraction=a.val_fraction, loss=a.loss, source=source)
+    kw = dict(val_fraction=a.val_fraction, loss=a.loss, source=source, scales=scales)
     payload = (fixed_named(forecasts, schema, family_of_model, named, **kw) if a.rule == "fixed_named"
                else best_of_family(forecasts, schema, family_of_model, **kw))
     if a.out.exists():
