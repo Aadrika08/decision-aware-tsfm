@@ -8,7 +8,7 @@ No forecasting model was loaded, no real forecast was made and M5/PJM were not
 opened while writing it.
 
 Everything below comes from the code on main `d209ae7`
-(`src/decision_aware_tsfm/cache/`), Aadrika's preflight in PR
+(`src/decision_aware_tsfm/cache/`, unchanged at `1261e8b` along with `scripts/` and `requirements/`), Aadrika's preflight in PR
 [#58](https://github.com/Aadrika08/decision-aware-tsfm/pull/58)
 (`docs/results/cache/2026-10-12-pilot-execution-preflight.md` and its
 `report.json`), the [development pilot runbook](../../runbooks/development-pilot.md),
@@ -35,7 +35,7 @@ PyArrow 16.1.0, no forecasting packages); see "How this runbook was checked".
 
 | What | Value | Where |
 | --- | --- | --- |
-| GPU used for Moirai | NVIDIA RTX 4050 Laptop GPU, 6,141 MiB total, 5,796 MiB free at probe, driver 610.57.04 | #58 note |
+| GPU used for Moirai | NVIDIA GeForce RTX 4050 Laptop GPU, 6,141 MiB total, 5,796 MiB free at probe, driver 610.57.04 | name: `2026-09-21-pilot-adapter-qualification.json` and the `gpu_probe` in `2026-09-21-pilot-preparation.json`; memory and driver: #58 note |
 | CPU used for classical models | AMD Ryzen 7 7735HS, 16 logical CPUs, Linux x86_64 | `2026-09-21-pilot-adapter-qualification.json` |
 | Moirai largest PyTorch allocation | 1,264,442,880 bytes (about 1.18 GiB) at horizon 168; this is allocated tensor memory, not total GPU use | `2026-09-21-pilot-adapter-qualification.md` |
 | Synthetic qualification, 72 attempts, all four models | 353.27 s wall time | same note |
@@ -137,7 +137,7 @@ mkdir -p ~/pilot/tools && cd ~/pilot
 git init decision-aware-tsfm
 git -C decision-aware-tsfm fetch ~/pilot-code.bundle refs/remotes/origin/main
 git -C decision-aware-tsfm checkout --detach FETCH_HEAD
-git -C decision-aware-tsfm rev-parse HEAD   # d209ae7c7d633664c179404284b884480a78b735 on 15 Oct
+git -C decision-aware-tsfm rev-parse HEAD   # the current origin/main (1261e8b on 15 Oct). What must match is implementation_sha256 below.
 
 uv venv --python 3.11.15 ~/pilot/venv
 uv pip sync --python ~/pilot/venv/bin/python --require-hashes ~/pilot/decision-aware-tsfm/requirements/qualification.txt
@@ -167,11 +167,11 @@ PYTHONPATH=src "$PILOT_PY" -c "from decision_aware_tsfm.cache.planner import _en
 # implementation_sha256 5aa32a3436d5a9cc3ac93d79f1f9892dc6db1969d932bfa33ade0aac07967e36
 ```
 
-If either differs, stop: the cache would not line up with Aadrika's plan. A
-`torch` version with a suffix such as `2.4.1+cu124` means torch came from
-somewhere other than the lock.
+If either differs, stop: the cache would not line up with Aadrika's plan. In the
+fingerprint output, a `torch` version with a suffix such as `2.4.1+cu124` means
+torch came from somewhere other than the lock.
 
-Confirm CUDA (expect `2.4.1 12.1 True` and the GPU name):
+Confirm CUDA (expect `2.4.1+cu121 12.1 True` and the GPU name):
 
 ```bash
 "$PILOT_PY" -c "import torch; print(torch.__version__, torch.version.cuda, torch.cuda.is_available(), torch.cuda.get_device_name(0))"
@@ -336,8 +336,9 @@ hash from section 2):
 
 ### 4b. First 24-job slice (Aadrika's #58 commands, only `PILOT_PY` changed)
 
+Do not type `set -e` in the interactive shell: later commands exit 2 by design and would close the shell. If you already typed it, run `set +e`.
+
 ```bash
-set -e
 export PILOT_PY=$HOME/pilot/venv/bin/python
 export PYTHONPATH=src HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 CUBLAS_WORKSPACE_CONFIG=:4096:8
 "$PILOT_PY" scripts/check_pilot_readiness.py --workload artifacts/runs/pilot-handoff-2026-10-12/HANDOFF-approved/workload.json --models artifacts/runs/pilot-handoff-2026-10-12/HANDOFF-approved/models.json --omega artifacts/runs/pilot-handoff-2026-10-12/HANDOFF-approved/omega.json --output-directory artifacts/runs/pilot-ready
@@ -425,8 +426,10 @@ PY
 # on the GPU machine:
 "$PILOT_PY" scripts/forecast_cache.py generate --plan-file artifacts/runs/plan-cuda.json --cache artifacts/runs/pilot-cache --real --output artifacts/runs/pilot-cuda-generation-1.json
 # when both have finished, pull the CPU cache into the main cache on the GPU machine, then run the full audit in 4d:
-rsync -a --exclude .writer.lock CPUHOST:pilot/decision-aware-tsfm/artifacts/runs/pilot-cache-cpu/ artifacts/runs/pilot-cache/
+rsync -a --ignore-existing --exclude .writer.lock CPUHOST:pilot/decision-aware-tsfm/artifacts/runs/pilot-cache-cpu/ artifacts/runs/pilot-cache/
 ```
+
+Each half-plan report ends `incomplete`, with the other half's files under `unexpected`; that is expected. Judge only by the full-plan audit in 4d. The CPU half also re-runs the 18 classical first-slice jobs into its own cache; `--ignore-existing` keeps the delivered first-slice files in the main cache unchanged.
 
 The device counts are 16,272 CPU jobs and 5,424 CUDA jobs (checked on 15 Oct).
 Job_ids and file paths do not depend on which plan file a job came from; on the
@@ -581,7 +584,7 @@ models, `device`, taus or seeds to get past one of these.
 | `CUDA measurement requires CUBLAS_WORKSPACE_CONFIG=:4096:8` | measure_pilot | Export it exactly as in section 4. |
 | `nvidia-smi identity probe failed` | measure_pilot | `nvidia-smi` does not work; fix the driver. |
 | `Measurement output, cache and input files must be separate` | measure_pilot | Keep the output folder, the cache and the inputs apart. |
-| `"status": "incomplete"` with entries under `failures` | generate run report | Each failure has `phase` (`source_preparation`, `model_loading`, `inference`, `publication`), `error` and `transient`. Transient errors (timeouts, connection resets) are retried once; others are not. Rerunning the same command tries every failed job again. A `model_loading` failure for `moirai_pilot` with `HF_HUB_OFFLINE=1` points back to the checkpoint step in section 2. |
+| `"status": "incomplete"` with entries under `failures` | generate run report | Each failure has `phase` (`source_preparation`, `model_loading`, `inference`, `execution`, `publication`; shape and crossing-quantile errors are recorded as `execution`), `error` and `transient`. Transient errors (timeouts, connection resets) are retried once; others are not. Rerunning the same command tries every failed job again. A `model_loading` failure for `moirai_pilot` with `HF_HUB_OFFLINE=1` points back to the checkpoint step in section 2. |
 | `Moirai forecast starts at the wrong timestamp`, `Invalid Moirai samples`, `Adapter returned crossing quantiles`, `Adapter returned invalid quantile shape or values` | adapters, executor | A model output failed a check. Keep the run report and raise it on #29; do not edit outputs. |
 
 Exit codes: the scripts exit 2 for blocked, incomplete or failed runs and 0 when
