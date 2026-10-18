@@ -1,4 +1,4 @@
-# 0008 — Manifest freeze (manifest-v2), Omega variants, and undefined Omega
+# 0009 — Manifest freeze (manifest-v2), Omega variants, and undefined Omega
 
 - Date: 2026-10-12
 - Owner: Dayson Du
