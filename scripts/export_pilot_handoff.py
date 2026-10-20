@@ -277,8 +277,8 @@ def main():
         },
         "rows": omega_rows,
     }
-    (out_dir / "workload.json").write_text(json.dumps(workload, indent=2))
-    (out_dir / "omega.json").write_text(json.dumps(omega, indent=2))
+    (out_dir / "workload.json").write_text(json.dumps(workload, indent=2), encoding="utf-8")
+    (out_dir / "omega.json").write_text(json.dumps(omega, indent=2), encoding="utf-8")
 
     jobs = len(workload_rows) * 4
     summary = [
@@ -309,7 +309,7 @@ def main():
         "- Selector role assignments are not included yet (pending Veer/Abdullah/Pratham).",
         f"- approval_reference: {args.approval_reference or 'NOT SET (no recorded approval yet)'}",
     ]
-    (out_dir / "summary.md").write_text("\n".join(summary) + "\n")
+    (out_dir / "summary.md").write_text("\n".join(summary) + "\n", encoding="utf-8")
 
     print("\n".join(summary))
 

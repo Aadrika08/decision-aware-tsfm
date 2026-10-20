@@ -74,10 +74,13 @@ series stays in the manifest and consumers count it as undefined.
 "Points Omega is computed on" means the levels, or the differences for the
 `_diffs` columns.
 
-Why `near_flat`: a series that sits on one value with a rare spike gets an
-Omega that depends only on where the spike falls (from 0 to about 0.05 in
-tests), not on how predictable the series is. Under manifest-v1, 22 such
-values came out as exactly 0.0 with status `ok`; all 22 are now `near_flat`.
+Why `near_flat`: for a series that sits on one value with a rare spike,
+Omega measures where the spike falls, not how predictable the series is.
+It can come out anywhere from 0 to almost 1: with the spike 5 points from
+the end of a flat series it is 0.9999. Under manifest-v1, 22 such values
+were exactly 0.0 with status `ok`, and the rule also removes 84
+full-history levels values that were not zero (the largest 0.201). All
+of them are now `near_flat`.
 
 The 99% cut is a judgement, not a natural gap in the data. Full-history
 mode share across active series:
@@ -90,8 +93,13 @@ mode share across active series:
 | 0.99 to 0.999 | 56 |
 | 0.999 and above (includes the 66 flat series) | 104 |
 
-`mode_share` is stored per series, so a different cut can be applied without
-regenerating the manifest.
+`mode_share` (full history) and `mode_share_4096` are stored per series and
+are taken on the levels. A different cut can be re-applied from the file
+for the two levels columns without
+regenerating the manifest. It cannot for the `_diffs` columns, where the
+rule is applied to the differences: 22 series have a levels share of 0.99
+or more while `omega_diffs` is `ok`, and 10 are `near_flat` on differences
+with a levels share below 0.99.
 
 ## Consequences
 

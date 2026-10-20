@@ -70,6 +70,29 @@ class UndefinedOmegaTests(unittest.TestCase):
         self.assertGreater(value, 0.0)
 
 
+class BoundaryTests(unittest.TestCase):
+    def test_cut_is_inclusive_at_exactly_99_percent(self):
+        x = np.zeros(1000)
+        x[:10] = np.arange(1.0, 11.0)  # 990 of 1,000 points equal
+        self.assertEqual(mode_share(x), 0.99)
+        self.assertEqual(compute_omega_checked(x), (None, "near_flat"))
+
+    def test_just_below_the_cut_stays_defined(self):
+        x = np.zeros(1000)
+        x[:11] = np.arange(1.0, 12.0)  # 989 of 1,000 points equal
+        self.assertEqual(compute_omega_checked(x)[1], "ok")
+
+    def test_floor_is_inclusive_at_exactly_1000_points(self):
+        x = RNG.normal(size=1000)
+        self.assertEqual(compute_omega_checked(x, min_finite=1000)[1], "ok")
+
+    def test_mode_share_uses_exact_values_not_rounded_ones(self):
+        x = np.zeros(1000)
+        x[:20] = 1e-9 * np.arange(1.0, 21.0)  # tiny but distinct values
+        self.assertEqual(mode_share(x), 0.98)
+        self.assertEqual(compute_omega_checked(x)[1], "ok")
+
+
 class DefinedOmegaTests(unittest.TestCase):
     def test_matches_compute_omega_exactly(self):
         t = np.arange(3000)
