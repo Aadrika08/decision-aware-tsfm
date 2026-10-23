@@ -35,8 +35,8 @@ pricing was used, and an oracle-priced result is flagged as a bound.
 """
 import numpy as np
 
-from decision_aware_tsfm.analysis.k3.boundary import (
-    MIN_DISTINCT_OMEGA_THRESHOLD, ORIENTATIONS, _validate, distinct_count)
+from decision_aware_tsfm.analysis.k3.common import (
+    MIN_DISTINCT_OMEGA_THRESHOLD, ORIENTATIONS, distinct_count, validate_columns)
 
 CLASSICAL, TSFM, DEFER = "classical", "tsfm", "defer"
 SPEC_VERSION = "k3-omega-tau-selector-v1"
@@ -52,7 +52,7 @@ def _as_object_array(name, values, length):
 
 def _check_inputs(omega, tau, cost_classical, cost_tsfm, datasets):
     """Omega may contain None (undefined); the other columns may not."""
-    tau, cost_classical, cost_tsfm = _validate(tau, cost_classical, cost_tsfm)
+    tau, cost_classical, cost_tsfm = validate_columns(tau, cost_classical, cost_tsfm)
     omega = _as_object_array("omega", omega, len(tau))
     datasets = _as_object_array("datasets", datasets, len(tau))
     for value in omega:
@@ -150,7 +150,7 @@ def fit_tau_only_baseline(tau, cost_classical, cost_tsfm):
     If the Omega-plus-tau selector cannot beat this, Omega is adding nothing
     beyond cost asymmetry and should not be presented as if it were.
     """
-    tau, cost_classical, cost_tsfm = _validate(tau, cost_classical, cost_tsfm)
+    tau, cost_classical, cost_tsfm = validate_columns(tau, cost_classical, cost_tsfm)
     rules = {}
     for value in sorted(set(tau.tolist())):
         at_tau = tau == value
@@ -202,7 +202,7 @@ def evaluate_selector(spec, omega, tau, cost_classical, cost_tsfm, datasets,
     if deferral_cost is None:
         deferral_each, pricing = np.minimum(cost_classical, cost_tsfm), "oracle_upper_bound"
     else:
-        deferral_each, = _validate(deferral_cost)
+        deferral_each, = validate_columns(deferral_cost)
         if deferral_each.shape != tau.shape:
             raise ValueError("deferral_cost length must match tau")
         pricing = "validation_comparator"
