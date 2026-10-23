@@ -1,0 +1,41 @@
+{
+  "observed": "2026-10-23",
+  "planned_jobs": 21696,
+  "planned_rows": 1395776,
+  "verified_jobs": 575,
+  "missing_jobs": 21121,
+  "saved_by_model": {
+    "autoarima_native": 557,
+    "autoets_simulated": 6,
+    "seasonal_naive_native": 6,
+    "moirai_pilot": 6
+  },
+  "autoarima_seconds": {
+    "n": 557,
+    "mean": 80.59978264803036,
+    "median": 69.67044674797216,
+    "max_observed": 334.16061925899703
+  },
+  "remaining_autoarima": 4867,
+  "arima_serial_hours_modeled": 108.96642837443437,
+  "arima_ideal_8worker_hours_modeled": 13.620803546804297,
+  "arima_required_jobs_hour_for_48h": 139.05714285714285,
+  "proposed_contingency": {
+    "restart_fraction": 0.1,
+    "failure_fraction": 0.1,
+    "reserve_other_models_audits_hours": 6
+  },
+  "old_oom_attempt_totals": "unknown",
+  "user_stop_wrapper_wall_seconds": 42260.670884513005,
+  "saved_plan_sha256": "84b29c6fd892da6375cdc7802215558c4e14e30bead8b9cf52657a7103f24d18",
+  "current_audit_sha256": "ec3f96660279c49bfba14f2689f53c5288020475b2838c22f0b8c3e7366a4fe2",
+  "sources": 55,
+  "source_revision": "30841734ac5cfddbd0c3bad6d09d2b6b32becbb0",
+  "execution_status": "stopped at user request; not resumed",
+  "prediction_limits": [
+    "Saved AutoARIMA samples beyond first slice cover horizon1 only.",
+    "Eight-worker scaling and remote host speed/RAM remain unmeasured.",
+    "No six-hour laptop or48h remote guarantee.",
+    "575 cached jobs do not satisfy full pilot gates."
+  ]
+}
