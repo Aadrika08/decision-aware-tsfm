@@ -1,3 +1,5 @@
+from contextlib import redirect_stderr, redirect_stdout
+import io
 import json
 from pathlib import Path
 import signal
@@ -28,12 +30,15 @@ class MeasurementTest(unittest.TestCase):
         self.plan_file.write_text(json.dumps(self.planned))
         self.cache = self.root / "cache"
         self.output = self.root / "measurement"
+        self.expected_workers = 1
 
     def fake_generation(self, command, **kwargs):
         self.assertIsInstance(command, list)
         self.assertNotIn("shell", kwargs)
-        self.assertEqual(command[command.index("--workers") + 1], "1")
+        self.assertEqual(command[command.index("--workers") + 1], str(self.expected_workers))
         self.assertEqual(kwargs["env"]["OPENBLAS_NUM_THREADS"], "1")
+        self.assertEqual(kwargs["env"]["OMP_NUM_THREADS"], "1")
+        self.assertEqual(kwargs["env"]["MKL_NUM_THREADS"], "1")
         Path(command[command.index("-o") + 1]).write_text(
             "Maximum resident set size (kbytes): 12345\n")
         Path(command[command.index("--output") + 1]).write_text('{"status":"complete"}')
@@ -49,6 +54,7 @@ class MeasurementTest(unittest.TestCase):
             result = measurement.measure(self.plan_file, self.cache, self.output)
             self.assertEqual(result["status"], "complete")
             self.assertEqual(result["evidence_kind"], "fixture")
+            self.assertEqual(result["cpu_workers"], 1)
             self.assertEqual(result["maximum_process_rss_kib"], 12345)
             self.assertIn("unavailable", result["errors"][0])
             self.assertTrue(result["hardware"]["cpu_models"])
@@ -56,6 +62,51 @@ class MeasurementTest(unittest.TestCase):
             self.assertEqual(self.plan_file.read_bytes(), before)
             with self.assertRaises(FileExistsError):
                 measurement.measure(self.plan_file, self.cache, self.output)
+
+    def test_parallel_workers_are_forwarded_and_persisted(self):
+        self.expected_workers = 4
+        with patch.object(measurement.shutil, "which", return_value=None), \
+                patch.object(measurement.subprocess, "Popen", side_effect=self.fake_generation):
+            result = measurement.measure(self.plan_file, self.cache, self.output, workers=4)
+        self.assertEqual(result["status"], "complete")
+        self.assertEqual(result["cpu_workers"], 4)
+        self.assertEqual(json.loads((self.output / "report.json").read_text())["cpu_workers"], 4)
+
+    def test_invalid_workers_never_create_output_or_spawn(self):
+        for workers in (0, -1, True, False, 1.0, "2", None):
+            with self.subTest(workers=workers), \
+                    patch.object(measurement.subprocess, "Popen") as spawned:
+                with self.assertRaisesRegex(ValueError, "workers must be a positive integer"):
+                    measurement.measure(self.plan_file, self.cache, self.output, workers=workers)
+                self.assertFalse(self.output.exists())
+                spawned.assert_not_called()
+
+    def test_cli_preserves_default_and_forwards_opt_in_workers(self):
+        for workers, flags in ((1, []), (4, ["--workers", "4"])):
+            self.expected_workers = workers
+            output = self.root / f"cli-{workers}"
+            with self.subTest(workers=workers), redirect_stdout(io.StringIO()), \
+                    patch.object(measurement.shutil, "which", return_value=None), \
+                    patch.object(measurement.subprocess, "Popen", side_effect=self.fake_generation):
+                result = measurement.main(["--plan-file", str(self.plan_file), "--cache", str(self.cache),
+                                           "--output-directory", str(output), *flags])
+            self.assertEqual(result, 0)
+            self.assertEqual(json.loads((output / "report.json").read_text())["cpu_workers"], workers)
+
+    def test_cli_rejects_invalid_workers_before_output_or_spawn(self):
+        for workers in ("0", "-1", "1.5"):
+            with self.subTest(workers=workers), redirect_stderr(io.StringIO()), \
+                    patch.object(measurement.subprocess, "Popen") as spawned:
+                arguments = ["--plan-file", str(self.plan_file), "--cache", str(self.cache),
+                             "--output-directory", str(self.output), "--workers", workers]
+                if workers == "1.5":
+                    with self.assertRaises(SystemExit) as error:
+                        measurement.main(arguments)
+                    self.assertEqual(error.exception.code, 2)
+                else:
+                    self.assertEqual(measurement.main(arguments), 2)
+                self.assertFalse(self.output.exists())
+                spawned.assert_not_called()
 
     def test_bad_plan_and_overlapping_paths_never_spawn(self):
         with patch.object(measurement.subprocess, "Popen") as spawned:

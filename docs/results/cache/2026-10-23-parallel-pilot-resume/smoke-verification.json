@@ -1,0 +1,47 @@
+{
+  "measurement_status": "complete",
+  "cpu_workers": 2,
+  "generated": 4,
+  "failed": 0,
+  "rows": 672,
+  "wall_seconds": 84.10459682001965,
+  "maximum_process_rss_kib": 212204,
+  "systemd_cgroup_memory_peak_bytes": 591183872,
+  "all_four_payloads_exactly_match_saved_references": true,
+  "comparisons": [
+    {
+      "job_id": "110f8cbb48840abed4d773ddcf1d44695047de23a4c7609eef163c11b0e6e5cd",
+      "model": "autoets_simulated",
+      "horizon": 168,
+      "seed": 43,
+      "rows": 168,
+      "all_payload_columns_exact": true
+    },
+    {
+      "job_id": "65b91009759557fd309dc8152ba52751d8237596289369684fb3aad8393d29f3",
+      "model": "autoets_simulated",
+      "horizon": 168,
+      "seed": 42,
+      "rows": 168,
+      "all_payload_columns_exact": true
+    },
+    {
+      "job_id": "920e6712c2ef00df82bed00da383155cfc2cdde428bfde1651f574801c3fd13b",
+      "model": "autoarima_native",
+      "horizon": 168,
+      "seed": 43,
+      "rows": 168,
+      "all_payload_columns_exact": true
+    },
+    {
+      "job_id": "ad8ae934b1763f936f3647a084dc2263ba2e72d5f1358e772a2061bcaa6bf99a",
+      "model": "autoarima_native",
+      "horizon": 168,
+      "seed": 42,
+      "rows": 168,
+      "all_payload_columns_exact": true
+    }
+  ],
+  "scope": "Four CPU jobs from one electricity series-origin; functional smoke, not representative throughput or48h admission.",
+  "plan_header_note": "The smoke has a descriptive nested counts_by_model header; planned_jobs,planned_rows and canonical jobs are validated and direct per-model counts checked. Future subset plans use integer counts."
+}
