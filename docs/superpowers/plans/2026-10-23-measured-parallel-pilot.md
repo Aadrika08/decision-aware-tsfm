@@ -42,7 +42,7 @@
 **Files:** new dated result record under `docs/results/cache/`, `docs/runbooks/pilot-parallel-resume.md`; ignored artifacts under `artifacts/runs/`.
 
 - [x] Record the fresh 575-valid / 21,121-missing audit and stopped-run status; publish the correction on #29.
-- [ ] Preserve source hashes, original plan and cache bytes in a hashed transfer artifact; validate relocation without altering canonical identities.
+- [x] Preserve source hashes, original plan and cache bytes in a hashed transfer artifact; validate relocation without altering canonical identities.
 - [x] Run one disposable real CPU smoke with two workers, a hard 300-second limit and bounded memory; compare saved reference predictions if feasible. Do not treat this as representative throughput.
 - [x] Supply exact setup, audit, bounded benchmark, measured admission and resume commands. Recommend CPU capacity first; retain the same modest single-GPU requirement.
-- [ ] Independently review the diff and handoff; run required checks, commit/push and open a PR closing #71 only. Leave #29/#30 open.
+- [x] Independently review the diff and handoff; run required checks, commit/push and open a PR closing #71 only. Leave #29/#30 open.

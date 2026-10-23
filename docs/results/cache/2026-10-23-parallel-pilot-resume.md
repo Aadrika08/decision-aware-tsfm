@@ -73,6 +73,24 @@ This is a functional parallelism check on one series-origin, not representative
 throughput, eight-worker RAM qualification or a measured two-day completion bound.
 No benchmark partitions were added to the 575-job production cache.
 
+## Prepared transfer artifact
+
+The ignored `artifacts/runs/parallel-71-20261023/` directory contains
+`pilot-resume-2026-10-23.tar.gz` (48,498,484 bytes) and its `.sha256` file.
+Archive SHA-256:
+`823c44d67eb155b9cf96e1c2dea270635b4ad29c288d83216b9f56394727437a`.
+It preserves 913 original stopped-run files (476,641,178 bytes before compression),
+excluding `.writer.lock`, plus separately labelled acceleration proof. Every original
+file was rehashed inside the archive and compared again with the unchanged source.
+
+The [transfer manifest](2026-10-23-parallel-pilot-resume/transfer-manifest.json)
+pins code `1937c7ba11e045449ef5469685b405ab51da58f3`. The archive includes original
+and approved inputs, all saved partitions and attempts, source arrays, roles and
+plans. It is staged locally for transfer to the selected host, not uploaded as a
+completed consumer cache. The Python environment and pinned Moirai checkpoint
+are installed/verified separately using the runbook. PR #72 publishes the code;
+#29/#30 remain open.
+
 ## Runtime choice and remaining work
 
 The [saved resource baseline](2026-10-23-parallel-pilot-resume/resource-baseline.json)
