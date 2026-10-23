@@ -1,0 +1,101 @@
+{
+  "evidence_kind": "real_pilot_first_slice",
+  "status": "complete",
+  "code_commit": "d2e1b1b40334ee89207be3eab4078b0d291d346a",
+  "approval_reference": "https://github.com/Aadrika08/decision-aware-tsfm/issues/29#issuecomment-6185355042",
+  "zip_sha256": "70e814bf323178df84b771f920f6a6114c6796cb5b143ba28ccce4833eb56ba0",
+  "original_metadata_sha256": {
+    "workload.json": "1474953eb7898c3f65986b6c54974af02b52b0be63eb39b58bdc246d3d979516",
+    "models.json": "75ed1fc5ab57935563436d3aa81012ae59b34089e9fed0e16b641eeba784098e",
+    "omega.json": "dd31de6c67927214478ff9d627eac31bacbe06fc8b12a3fa04c364196b195885"
+  },
+  "approved_metadata_sha256": {
+    "workload.json": "32f1e5745ed23ae2e0bbb82061897ec6ec4847aa99ccf11661f0cb8f9a0ee1e1",
+    "models.json": "384acf6d491e29b2440c99f73e5f800b65ab57ad33ecddcdaa4c3af4ad011c33",
+    "omega.json": "dd31de6c67927214478ff9d627eac31bacbe06fc8b12a3fa04c364196b195885"
+  },
+  "only_approval_fields_changed": true,
+  "jobs": 24,
+  "rows": 1544,
+  "wall_seconds": 454.1865357030183,
+  "maximum_process_rss_kib": 1557468,
+  "gpu_device_samples": {
+    "GPU-40598445-1159-3d79-c19d-7572ffbd1227": {
+      "sample_count": 454,
+      "max_used_mib": 2421.0,
+      "max_utilization_percent": 78.0,
+      "total_mib": 6141.0,
+      "first_sample": "2026/10/15 21:41:52.228",
+      "last_sample": "2026/10/15 21:49:25.340"
+    }
+  },
+  "hardware": {
+    "platform": "Linux-7.2.5-3-omarchy-x86_64-with-glibc2.44",
+    "logical_cpus": 16,
+    "cpu_models": [
+      "AMD Ryzen 7 7735HS with Radeon Graphics"
+    ],
+    "gpu_probe": {
+      "command": [
+        "/usr/bin/nvidia-smi",
+        "--query-gpu=uuid,name,driver_version,memory.total",
+        "--format=csv,noheader,nounits"
+      ],
+      "exit_code": 0,
+      "stdout": "GPU-40598445-1159-3d79-c19d-7572ffbd1227, NVIDIA GeForce RTX 4050 Laptop GPU, 610.57.04, 6141\n",
+      "stderr": ""
+    },
+    "measured_gpu_uuid": "GPU-40598445-1159-3d79-c19d-7572ffbd1227"
+  },
+  "model_inference_seconds": {
+    "autoarima_native": {
+      "jobs": 6,
+      "sum": 435.7049674259615,
+      "mean": 72.61749457099359
+    },
+    "autoets_simulated": {
+      "jobs": 6,
+      "sum": 9.836481628008187,
+      "mean": 1.6394136046680312
+    },
+    "seasonal_naive_native": {
+      "jobs": 6,
+      "sum": 0.0054637819994241,
+      "mean": 0.00091063033323735
+    },
+    "moirai_pilot": {
+      "jobs": 6,
+      "sum": 1.3137357030063868,
+      "mean": 0.21895595050106445
+    }
+  },
+  "audit": {
+    "status": "complete",
+    "planned_jobs": 24,
+    "verified_jobs": 24,
+    "missing": [],
+    "corrupt": [],
+    "unexpected": [],
+    "duplicate": {},
+    "mismatched_actuals": []
+  },
+  "handoff_sha256": "96a6dcd295d91f3a4887c27fa3fd315dfec2c3e664675db35f1457857d6719c7",
+  "artifacts": {
+    "pilot-first-bundle-2026-10-15.tar.gz": "b86feb412b216b1316f7ee465c1e561719aaab1d1c0b3f24f1a61410248479bf",
+    "pilot-first-evidence-2026-10-15.tar.gz": "5516cf81e07c35c23818b81035a7046aaddc58c3bf5e078f546f61687ae85c10"
+  },
+  "release": "https://github.com/Aadrika08/decision-aware-tsfm/releases/tag/pilot-first-2026-10-15",
+  "limitations": [
+    "One series/origin; not full-pilot representative timing",
+    "One origin cannot support validation comparators or K3 analysis",
+    "Device memory/utilization sampled across whole device; RSS not summed tree",
+    "No consumer-owner acceptance inferred from local ingress checks"
+  ],
+  "full_pilot_status": "running",
+  "full_pilot_jobs": 21696,
+  "full_pilot_rows": 1395776,
+  "consumer_owner_acceptance": {
+    "Veer": null,
+    "Abdullah": null
+  }
+}

@@ -1,0 +1,99 @@
+{
+  "evidence_kind": "local_real_first_slice_consumer_probe",
+  "checked_at": "2026-10-15T19:05:35.736532+00:00",
+  "source_commit": "d2e1b1b40334ee89207be3eab4078b0d291d346a",
+  "handoff_sha256": "96a6dcd295d91f3a4887c27fa3fd315dfec2c3e664675db35f1457857d6719c7",
+  "consumer": "Veer decision ingress with supplemental producer source checks",
+  "checks": {
+    "current": {
+      "ingress": {
+        "fixture": false,
+        "evidence_kind": "real_pilot_cache",
+        "naming_scheme": "dataset-config-v1",
+        "source_repository": "Salesforce/GiftEval",
+        "partitions_listed": 24,
+        "partitions_hash_verified": 24,
+        "unlisted_parquet_files": 0,
+        "rows": 1544,
+        "jobs": 24,
+        "series": 1,
+        "series_origins": 1,
+        "models": [
+          "autoarima_native",
+          "autoets_simulated",
+          "moirai_pilot",
+          "seasonal_naive_native"
+        ],
+        "seeds": [
+          42,
+          43
+        ],
+        "omega_variant": "current",
+        "omega_rows_for_variant": 904,
+        "omega_undefined_rows_for_variant": 0,
+        "omega_undefined_reasons_for_variant": {},
+        "omega_sha256": "dd31de6c67927214478ff9d627eac31bacbe06fc8b12a3fa04c364196b195885",
+        "handoff_sha256": "96a6dcd295d91f3a4887c27fa3fd315dfec2c3e664675db35f1457857d6719c7"
+      },
+      "source_check": {
+        "series": 1,
+        "target_rows_checked": 1544,
+        "source_hashes_match_bundle": 1
+      },
+      "all_11_quantile_columns_preserved": true
+    },
+    "last_4096": {
+      "ingress": {
+        "fixture": false,
+        "evidence_kind": "real_pilot_cache",
+        "naming_scheme": "dataset-config-v1",
+        "source_repository": "Salesforce/GiftEval",
+        "partitions_listed": 24,
+        "partitions_hash_verified": 24,
+        "unlisted_parquet_files": 0,
+        "rows": 1544,
+        "jobs": 24,
+        "series": 1,
+        "series_origins": 1,
+        "models": [
+          "autoarima_native",
+          "autoets_simulated",
+          "moirai_pilot",
+          "seasonal_naive_native"
+        ],
+        "seeds": [
+          42,
+          43
+        ],
+        "omega_variant": "last_4096",
+        "omega_rows_for_variant": 904,
+        "omega_undefined_rows_for_variant": 0,
+        "omega_undefined_reasons_for_variant": {},
+        "omega_sha256": "dd31de6c67927214478ff9d627eac31bacbe06fc8b12a3fa04c364196b195885",
+        "handoff_sha256": "96a6dcd295d91f3a4887c27fa3fd315dfec2c3e664675db35f1457857d6719c7"
+      },
+      "source_check": {
+        "series": 1,
+        "target_rows_checked": 1544,
+        "source_hashes_match_bundle": 1
+      },
+      "all_11_quantile_columns_preserved": true
+    }
+  },
+  "source_report": {
+    "kind": "seasonal_naive_mae_season_24_history_before_first_origin",
+    "season": 24,
+    "reference": "https://github.com/Aadrika08/decision-aware-tsfm/issues/29#issuecomment-6185355042 item 7a",
+    "workload_name": "workload.json",
+    "sources_folder": "workload folder",
+    "series": 55,
+    "sources_hash_verified": 55,
+    "series_without_usable_scale": 0
+  },
+  "model_imports": false,
+  "limitations": [
+    "Local compatibility probe, not Veer owner acceptance",
+    "First slice only; full-bundle execution and resource use unmeasured",
+    "Source checker is supplemental frozen-producer validation"
+  ]
+}

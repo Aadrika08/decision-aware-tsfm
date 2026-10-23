@@ -1,8 +1,13 @@
 # ADR 0006: explicit production dataset/config naming
 
-Status: proposed for shared review in [#45](https://github.com/Aadrika08/decision-aware-tsfm/issues/45).
-Aadrika approved implementing the producer changes on 2026-09-25. Dayson, Veer
-and Abdullah have not yet signed off this exchange contract or a real manifest.
+Status: accepted for the producer/consumer format and synthetic handoff in
+[#45](https://github.com/Aadrika08/decision-aware-tsfm/issues/45).
+Aadrika approved implementation on 2026-09-25; the producer changes landed in PR #47.
+Dayson [agreed to the naming and source exchange on October 4](https://github.com/Aadrika08/decision-aware-tsfm/issues/45#issuecomment-5985506332).
+Veer [accepted the original fixture and decision-engine format on October 10](https://github.com/Aadrika08/decision-aware-tsfm/issues/45#issuecomment-6101219835),
+and Abdullah [accepted the K3 loader fixture and format on October 11](https://github.com/Aadrika08/decision-aware-tsfm/issues/45#issuecomment-6112272805).
+These acceptances cover the exchange contract and synthetic fixture; real-cache
+acceptance remains separate under #29. They do not approve a study roster or grid.
 
 ## Reason
 
@@ -11,7 +16,7 @@ Dayson's proposed manifest uses `dataset=ett1`, `config=H`. Silently changing th
 meanings would break joins and discard repository provenance. The production
 sprint required a shared contract but did not freeze this exact spelling.
 
-## Proposed contract
+## Exchange contract
 
 New workload and Omega documents carry the same top-level
 `naming_scheme: "dataset-config-v1"` and `source_repository: "Salesforce/GiftEval"`.
@@ -57,12 +62,13 @@ Origin remains the zero-based first forecast target; target position is
 `origin + step - 1`. Omega remains a separate source/origin/variant sidecar.
 No dataset, split, model roster, horizon, tau, Omega calculation, threshold,
 representative rule or oracle definition changes here. Development fitting and
-unseen-development evaluation assignments still need owner agreement. M5/PJM
-remain unavailable for development.
+unseen-development evaluation assignments are governed separately by ADR 0007 and
+the bounded-pilot decision on #29. M5/PJM remain unavailable for development.
 
 ## Acceptance
 
 The implementation and synthetic exchange checks are described in the
-[production handoff](../runbooks/production-cache-handoff.md). Shared approval,
-Dayson's post-migration reproducibility check, and real consumer acceptance remain
-separate prerequisites for freezing a real workload.
+[production handoff](../runbooks/production-cache-handoff.md). Shared format
+agreement and synthetic consumer acceptance are linked above. The real workload,
+its reproducibility evidence, execution authority and actual real-cache acceptance
+are tracked separately in #29/#30; this format record does not establish them.

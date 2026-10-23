@@ -1,0 +1,144 @@
+{
+  "evidence_kind": "bounded_real_pilot_continuation_snapshot",
+  "observed_at": "2026-10-15T16:44:18.125349+00:00",
+  "completion_status": {
+    "phase": "running_full_pilot",
+    "updated_at": "2026-10-15T16:44:18.125349+00:00",
+    "supervisor_pid": 2543543,
+    "measurement_pid": 2536468,
+    "published_partition_files": 34,
+    "planned_jobs": 21696
+  },
+  "supervisor_launch": {
+    "pid": 2543543,
+    "command": [
+      "/home/utkarsh/Work/shraddha/decision-aware-tsfm/cache/qualification-20/.venv/bin/python",
+      "/home/utkarsh/Work/shraddha/decision-aware-tsfm/cache/worktrees/real-pilot-29/artifacts/runs/pilot-2026-10-15/finish_pilot.py"
+    ],
+    "code_commit": "d2e1b1b40334ee89207be3eab4078b0d291d346a",
+    "supervisor_sha256": "92985ed293ac410351274a840e319a0ae6636f771043fa7c49a65e86e6a0dc6a",
+    "package_script_sha256": "7bca616970e87c4fc39b443247d5038b39cb6e17ee0086dd6cc67fa5c1f08b21"
+  },
+  "frozen_code_commit": "d2e1b1b40334ee89207be3eab4078b0d291d346a",
+  "controlled_interruption": {
+    "status": "interrupted",
+    "wall_seconds": 196.11249038897222,
+    "preserved_partitions": 24,
+    "all_preserved_hashes_match": true,
+    "partial_audit": {
+      "status": "incomplete",
+      "planned_jobs": 21696,
+      "verified_jobs": 24,
+      "missing_count": 21672,
+      "corrupt_count": 0,
+      "unexpected_count": 0,
+      "duplicate_count": 0,
+      "mismatched_actuals_count": 0,
+      "retained_report_path": "artifacts/runs/pilot-2026-10-15/after-interruption-audit.json",
+      "retained_report_sha256": "7b0fdb87494ed7afe5c8ac204a8136d0f3c5570e98109ee15636ad07f8d24994"
+    }
+  },
+  "first_slice_only_budget": {
+    "base": {
+      "status": "complete",
+      "scope": "resource_projection",
+      "scenario": "real",
+      "resources": {
+        "cpu": {
+          "planned_jobs": 18,
+          "measured_sample_count": 18,
+          "matched_signature_count": 9,
+          "inference_seconds": 445.5469128359691,
+          "loading_seconds": 0.5459711360745132,
+          "io_seconds": 0.3544831872568466,
+          "resource_hours": 0.12401315754425013
+        },
+        "cuda": {
+          "planned_jobs": 6,
+          "measured_sample_count": 6,
+          "matched_signature_count": 3,
+          "inference_seconds": 1.3137357030063868,
+          "loading_seconds": 3.8021655589691363,
+          "io_seconds": 0.10320137900998816,
+          "resource_hours": 0.0014497507336070864
+        }
+      },
+      "storage_bytes": 479885,
+      "measured_storage_projection_bytes": 479885,
+      "wall_clock_hours": null,
+      "coverage": {
+        "matched_jobs": 24,
+        "planned_jobs": 24
+      },
+      "safety_margins": {
+        "restart_fraction": 0.0,
+        "failure_fraction": 0.0
+      },
+      "assumptions": [
+        "Loading and I/O inputs are explicit totals for the planned schedule",
+        "Restart and failure fractions multiply resource occupancy"
+      ],
+      "limitations": [
+        "Resource sums are not elapsed wall time; use measured run schedule"
+      ],
+      "reasons": []
+    },
+    "proposed_10_percent_restart_plus_10_percent_failure": {
+      "status": "complete",
+      "scope": "resource_projection",
+      "scenario": "real",
+      "resources": {
+        "cpu": {
+          "planned_jobs": 18,
+          "measured_sample_count": 18,
+          "matched_signature_count": 9,
+          "inference_seconds": 445.5469128359691,
+          "loading_seconds": 0.5459711360745132,
+          "io_seconds": 0.3544831872568466,
+          "resource_hours": 0.1488157890531002
+        },
+        "cuda": {
+          "planned_jobs": 6,
+          "measured_sample_count": 6,
+          "matched_signature_count": 3,
+          "inference_seconds": 1.3137357030063868,
+          "loading_seconds": 3.8021655589691363,
+          "io_seconds": 0.10320137900998816,
+          "resource_hours": 0.001739700880328504
+        }
+      },
+      "storage_bytes": 479885,
+      "measured_storage_projection_bytes": 479885,
+      "wall_clock_hours": null,
+      "coverage": {
+        "matched_jobs": 24,
+        "planned_jobs": 24
+      },
+      "safety_margins": {
+        "restart_fraction": 0.1,
+        "failure_fraction": 0.1
+      },
+      "assumptions": [
+        "Loading and I/O inputs are explicit totals for the planned schedule",
+        "Restart and failure fractions multiply resource occupancy"
+      ],
+      "limitations": [
+        "Resource sums are not elapsed wall time; use measured run schedule"
+      ],
+      "reasons": []
+    }
+  },
+  "remaining": [
+    "Full generation and saved-plan audit",
+    "Completed rerun with zero generation",
+    "Disposable missing/corrupt recovery",
+    "Measured full-pilot resource budget",
+    "Actual Veer and Abdullah consumer acceptance"
+  ],
+  "limits": [
+    "Timestamped status, not a live progress report",
+    "First-only resource occupancy is not full-pilot elapsed time",
+    "Proposed allowances are not measured or approved full-study cost",
+    "Host must remain running; supervisor does not survive reboot"
+  ]
+}
