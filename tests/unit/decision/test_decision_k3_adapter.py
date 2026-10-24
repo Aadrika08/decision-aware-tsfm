@@ -93,6 +93,7 @@ def _select(selector, units):
 def _fixture_tables(omega=None, fc=None, **kw):
     fc0, omega0, _ = _shared.fixture_data()
     kw.setdefault("fit_only_datasets", FIT_ONLY_DATASETS)
+    kw.setdefault("scales", _shared.scales())
     return build_tables(fc0 if fc is None else fc, FIXTURE_SCHEMA, REPRESENTATIVES, FAMILY_OF_MODEL,
                         omega0 if omega is None else omega, **kw)
 
@@ -207,8 +208,8 @@ class WithoutTheK3Module(unittest.TestCase):
             with contextlib.redirect_stdout(buf):
                 run_fixture.main()
             self.assertEqual(sorted(p.name for p in Path(tmp).iterdir()),
-                             ["fixture_cache.parquet", "fixture_omega.csv", "planted_answers.csv",
-                              "selection_results.parquet", "summary_by_dataset.csv"])
+                             ["fixture_cache.parquet", "fixture_omega.csv", "fixture_scales.csv",
+                              "planted_answers.csv", "selection_results.parquet", "summary_by_dataset.csv"])
             res = pd.read_parquet(Path(tmp) / "selection_results.parquet")
         self.assertIn("D_Omega placeholder, leave-one-dataset-out folds:", buf.getvalue())
         self.assertNotIn("without a choice", buf.getvalue())
@@ -736,7 +737,7 @@ class RunFixtureCommandWithTheK3Selector(unittest.TestCase):
     def test_writes_the_frozen_folds_and_matches_run(self):
         out, files, res, summary, folds = self._main()
         self.assertEqual(files, ["d_omega_folds.json", "fixture_cache.parquet", "fixture_omega.csv",
-                                 "planted_answers.csv", "selection_charged.parquet", "selection_results.parquet",
+                                 "fixture_scales.csv", "planted_answers.csv", "selection_charged.parquet", "selection_results.parquet",
                                  "summary_by_dataset.csv", "summary_by_horizon_tau.csv"])
         pd.testing.assert_frame_equal(res, _k3_results()[0])
         self.assertEqual(folds, _k3_results()[1].describe())
