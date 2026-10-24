@@ -4,6 +4,11 @@
 - Owner: Dayson Du
 - Issue: https://github.com/Aadrika08/decision-aware-tsfm/issues/1
 - Status: implemented, verified on m4_daily, covid_deaths, and ett1_H
+- Note (2026-10-24): the trim described here is still the one in use. The
+  counts and file names below are historical: the current manifest is
+  manifest-v2 (0009), 8,761 active series, files under
+  `artifacts/reference/manifests/`, produced by
+  `scripts/stage0prep_fixed_v2.py`.
 
 ## Decision
 
