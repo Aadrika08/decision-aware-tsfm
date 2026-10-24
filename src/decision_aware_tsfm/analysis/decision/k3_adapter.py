@@ -174,6 +174,33 @@ class K3SelectorAdapter:
                     specs={str(h): copy.deepcopy(s) for h, s in sorted(self.specs.items())})
 
 
+class K3OmegaTauKind:
+    """E2 selector kind for the K3 selector (experiments/e2.register_selector_kind).
+
+    fit returns plain JSON (his settings plus one frozen spec per horizon) and
+    build turns it back into the K3SelectorAdapter that K3SelectorAdapter.fit
+    would have made, so a frozen E2 fold chooses what the engine's D_Omega
+    chose on the same fold. Same settings as build_k3_d_omega's defaults unless
+    given here."""
+    kind = "k3_omega_tau"
+
+    def __init__(self, margin: float = DEFAULT_MARGIN, k3_min_distinct: int = DEFAULT_K3_MIN_DISTINCT,
+                 cost: str = DEFAULT_COST):
+        self.margin, self.k3_min_distinct, self.cost = float(margin), int(k3_min_distinct), cost
+
+    def fit(self, fit_units: pd.DataFrame) -> dict:
+        a = K3SelectorAdapter.fit(fit_units, margin=self.margin, k3_min_distinct=self.k3_min_distinct,
+                                  cost=self.cost)
+        return dict(margin=a.margin, k3_min_distinct=a.k3_min_distinct, cost=a.cost,
+                    specs={str(h): copy.deepcopy(sp) for h, sp in sorted(a.specs.items())})
+
+    def build(self, params: dict, fit_series, fit_datasets) -> K3SelectorAdapter:
+        return K3SelectorAdapter(specs={int(h): sp for h, sp in params["specs"].items()},
+                                 margin=float(params["margin"]),
+                                 k3_min_distinct=int(params["k3_min_distinct"]), cost=str(params["cost"]),
+                                 fitted_series=frozenset(fit_series), fitted_datasets=tuple(fit_datasets))
+
+
 def build_k3_d_omega(tables, *, fit_scheme: str = "leave_one_dataset_out",
                      min_fit_datasets: int = DEFAULT_MIN_FIT_DATASETS,
                      k3_min_distinct: int = DEFAULT_K3_MIN_DISTINCT,
