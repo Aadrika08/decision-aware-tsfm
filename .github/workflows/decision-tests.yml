@@ -16,15 +16,15 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install pinned numerical dependencies
-        run: python -m pip install numpy==1.26.4 pandas==2.2.3 pyarrow==16.1.0 scipy==1.11.4
+      - name: Install pinned numerical dependencies (K3 needs scikit-learn, versions from requirements/analysis.txt)
+        run: python -m pip install numpy==1.26.4 pandas==2.2.3 pyarrow==16.1.0 scipy==1.11.4 scikit-learn==1.5.2 joblib==1.6.0 threadpoolctl==3.7.0
       - name: Install package without forecasting dependencies
         run: python -m pip install --no-deps -e .
       - name: Run each decision-side unit suite present on this branch
         run: |
           status=0
           found=0
-          for suite in decision experiments e3 k2 omega; do
+          for suite in decision experiments e3 k2 omega k3; do
             if [ -d "tests/unit/$suite" ]; then
               found=1
               echo "::group::tests/unit/$suite"
