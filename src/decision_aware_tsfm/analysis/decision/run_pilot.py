@@ -33,8 +33,9 @@ Steps, in order. Every default is a decision posted on #29 (DECISIONS_REFERENCE)
   4. Engine. pipeline.build_tables and pipeline.run: the seven comparators, leave-one-
      dataset-out with at least 3 fitting datasets, one run per static threshold
      (default 0.45, then 0.4 and 0.5; the first is the headline). D_Omega is the
-     placeholder on main; d_omega_builder in run_pilot() is the seam where the K3
-     selector adapter plugs in. The test costs are recomputed straight from the raw
+     placeholder by default; --d-omega k3_selector puts the K3 Omega-plus-tau selector
+     there (k3_adapter.build_k3_d_omega), and E2 then freezes the same selector per
+     fold (k3_adapter.K3OmegaTauKind). d_omega_builder in run_pilot() is the seam. The test costs are recomputed straight from the raw
      quantile columns (run_handoff_check.direct_test_costs) and must match.
   5. E1 and E2 on the headline run: e1.run_e1 and e1.mean_delta_intervals; e2.fit,
      freeze, load_frozen and evaluate once per leave-one-dataset-out fold (its choices
@@ -851,13 +852,27 @@ def main(argv=None):
     ap.add_argument("--n-boot", type=int, default=200, help="bootstrap resamples; 0 skips intervals")
     ap.add_argument("--boot-seed", type=int, default=0)
     ap.add_argument("--figures", action="store_true", help="draw PNG figures (needs matplotlib)")
+    ap.add_argument("--d-omega", choices=("placeholder", "k3_selector"), default="placeholder",
+                    help="what fills the D_Omega slot (default: the placeholder)")
     a = ap.parse_args(argv)
+    k3 = {}
+    if a.d_omega == "k3_selector":
+        from . import k3_adapter
+        try:
+            k3_adapter.k3_module()
+        except k3_adapter.K3SelectorUnavailable as e:
+            ap.error(str(e))
+        e2.register_selector_kind(k3_adapter.K3OmegaTauKind())
+
+        def k3_selector(tables):
+            return k3_adapter.build_k3_d_omega(tables, min_fit_datasets=a.min_fit_datasets)
+        k3 = dict(d_omega_builder=k3_selector, e2_selector_kind=k3_adapter.K3OmegaTauKind.kind)
     try:
         m = run_pilot(a.bundle, a.out, variant=a.variant, thresholds=a.static_thresholds,
                       workload=a.workload, role_table=a.role_table, fixed_classical=a.fixed_classical,
                       sources=a.sources,
                       min_fit_datasets=a.min_fit_datasets, n_boot=a.n_boot, boot_seed=a.boot_seed,
-                      figures=a.figures)
+                      figures=a.figures, **k3)
     except (PilotRunError, HandoffError, CacheError, rt.RoleTableError, HeldOutLeakError,
             EvaluationRowsError) as exc:
         raise SystemExit(f"pilot run stopped, nothing written: {type(exc).__name__}: {exc}")

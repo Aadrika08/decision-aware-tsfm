@@ -630,6 +630,8 @@ def worst_decile_regret(selection: pd.DataFrame, selector: str, by=("horizon", "
 
 # --------------------------------------------------------------------------- evaluate
 
+WORST_DECILE_COLUMNS = ("horizon", "tau", "selector", "n_series", "n_in_worst", "worst_decile_regret",
+                        "p90_series_regret", "max_series_regret", "mean_series_regret")
 RESULT_TABLES = ("selection", "unit_regret", "regret_summary", "gap_to_validation", "worst_decile",
                  "selector_cost")
 
@@ -824,11 +826,16 @@ def evaluate(frozen: FrozenSpec, tables: dict, allow_held_out: bool = False,
         raise FrozenFileError("frozen parameters changed during evaluation")
     name = p["selector_name"]
     tag = lambda d: d.assign(frozen_sha256=frozen.sha256)
+    # a selector may defer every unit of a fold (the K3 selector below its floor); then there
+    # is no decided series to rank, and the worst-decile table is empty rather than an error
+    decided = ((selection["selector"] == name) & (selection["status"] == "selected")).any()
+    worst = (worst_decile_regret(selection, name) if decided
+             else pd.DataFrame(columns=WORST_DECILE_COLUMNS))
     return EvalResult(selection=selection, selector_name=name,
                       unit_regret=tag(unit_regret(selection, name)),
                       regret_summary=tag(regret_summary(selection)),
                       gap_to_validation=tag(gap_to_validation(selection, name)),
-                      worst_decile=tag(worst_decile_regret(selection, name)),
+                      worst_decile=tag(worst),
                       selector_cost=tag(pd.DataFrame(timing)),
                       frozen_sha256=frozen.sha256, selector_code_sha256=code,
                       frozen_path=str(frozen.path), held_out_evaluated=held, ledger_entry=entry,

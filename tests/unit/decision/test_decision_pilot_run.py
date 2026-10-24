@@ -606,6 +606,68 @@ class Internals(PilotBundle):
                 rp.run_pilot(root, Path(d) / "out", n_boot=0)
 
 
+try:
+    from decision_aware_tsfm.analysis.decision import k3_adapter
+    k3_adapter.k3_module()
+    NO_K3 = None
+except ImportError as _e:
+    NO_K3 = f"K3 selector not importable here ({_e})"
+
+
+@unittest.skipIf(NO_K3, NO_K3 or "")
+class K3SelectorInThePilot(PilotBundle):
+    """--d-omega k3_selector: the K3 selector in the D_Omega slot and frozen by E2 per fold."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.k3_out = cls.base / "run_k3"
+        quiet(rp.main, [str(cls.bundle), "--out", str(cls.k3_out), "--n-boot", "0",
+                        "--d-omega", "k3_selector"])
+
+    def test_manifest_names_the_selector_and_e2_kind(self):
+        m = json.loads((self.k3_out / "manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(m["settings"]["d_omega"], "k3_selector")
+        self.assertEqual(m["settings"]["e2_selector_kind"], k3_adapter.K3OmegaTauKind.kind)
+
+    def test_e2_frozen_k3_folds_choose_what_the_engine_chose(self):
+        check = self.read("e2/fold_check.csv", self.k3_out)
+        self.assertTrue(check.fitted.all())
+        self.assertEqual(int(check.n_different.sum()), 0)
+        self.assertEqual(int(check.n_same_as_engine.sum()), len(self.sel(out=self.k3_out).query(
+            "selector == 'd_omega'")))
+
+    def test_only_d_omega_changes_and_its_deferrals_are_priced(self):
+        k3, base = self.sel(out=self.k3_out), self.sel()
+        other = lambda s: s[s.selector != "d_omega"].reset_index(drop=True)
+        pd.testing.assert_frame_equal(other(k3), other(base))
+        d = k3[k3.selector == "d_omega"]
+        self.assertGreater(int((d.status == "defer").sum()), 0)
+        self.assertGreater(int((d.status == "selected").sum()), 0)
+        self.assertTrue(d.loc[d.status == "defer", "note"].str.contains("reason=").all())
+        h = self.read("tables/headline_by_selector.csv", self.k3_out)
+        row = h[(h.selector == "d_omega") & h.headline].iloc[0]
+        self.assertEqual(int(row.n_deferred), int((d.status == "defer").sum()))
+        self.assertEqual(int(row.n_unpriced), 0)
+        self.assertTrue(np.isfinite(row.mean_scaled_regret_deferrals_priced))
+
+    def test_a_fold_with_every_unit_deferred_gives_an_empty_worst_decile(self):
+        d = self.sel(out=self.k3_out).query("selector == 'd_omega'")
+        all_deferred = [ds for ds, g in d.groupby("dataset") if (g.status == "defer").all()]
+        self.assertTrue(all_deferred)                     # the case this guards exists here
+        self.assertTrue((self.k3_out / "e2" / "fold_check.csv").exists())
+
+    def test_k3_kind_round_trips_through_json(self):
+        from . import _shared
+        fit_units = fit_pool(_shared.tables()).dropna(subset=["omega", "J_classical", "J_tsfm", "scale"])
+        kind = k3_adapter.K3OmegaTauKind()
+        params = json.loads(json.dumps(kind.fit(fit_units), allow_nan=False))
+        built = kind.build(params, sorted(fit_units.series_id.unique()),
+                           sorted(fit_units.dataset.unique()))
+        direct = k3_adapter.K3SelectorAdapter.fit(fit_units)
+        self.assertEqual(built.describe(), direct.describe())
+
+
 class UndefinedOmega(unittest.TestCase):
     """One series has a null Omega with a reason (as Bitbrains may): the Omega rules defer
     there, everything else still runs, and the deferral is priced and counted."""

@@ -245,7 +245,7 @@ def fit_pool(tables) -> pd.DataFrame:
 
 
 def run(tables, representatives, static_threshold, fit_scheme="leave_one_dataset_out",
-        min_fit_datasets=3):
+        min_fit_datasets=3, d_omega_fit=None):
     """Run the seven comparators.
 
     fit_scheme decides how D_Omega is fitted:
@@ -253,18 +253,31 @@ def run(tables, representatives, static_threshold, fit_scheme="leave_one_dataset
           evaluation dataset, on every other dataset; see LeaveOneDatasetOut.
       fit_only_datasets: one fit on the fit-only datasets, applied everywhere
           (the earlier scheme; E2 freezes a rule this way).
+
+    d_omega_fit decides what is fitted in the D_Omega slot, under either scheme:
+      None (default): the placeholder, DOmegaLinear.fit.
+      callable(fit_units) -> selector with select(inp): for example
+          k3_adapter.K3SelectorAdapter.fit, the K3 Omega-plus-tau selector (#26).
+          k3_adapter.build_k3_d_omega(tables, ...) builds the same thing in one call.
     """
-    if fit_scheme == "leave_one_dataset_out":
-        d_omega = LeaveOneDatasetOut.build(fit_pool(tables), tables["units"]["dataset"].unique(),
-                                           min_fit_datasets=min_fit_datasets)
-    elif fit_scheme == "fit_only_datasets":
-        usable = tables["fit_units"].dropna(subset=["omega", "J_classical", "J_tsfm"])
-        if usable.empty:
-            d_omega = NotFitted("d_omega", "no fit-only datasets supplied")
-        else:
-            d_omega = DOmegaLinear.fit(tables["fit_units"])
-    else:
-        raise ValueError(f"fit_scheme must be one of {FIT_SCHEMES}, got {fit_scheme!r}")
+    d_omega = fit_d_omega(tables, fit_scheme, min_fit_datasets, d_omega_fit)
     res = run_selectors(seven_selectors(static_threshold, d_omega), tables["units"],
                         tables["val"], tables["test"], representatives, tables["n_val"])
     return res, d_omega
+
+
+def fit_d_omega(tables, fit_scheme="leave_one_dataset_out", min_fit_datasets=3, d_omega_fit=None):
+    """The D_Omega selector run() puts in the slot; arguments as in run().
+
+    min_fit_datasets is the ENGINE's floor: under leave-one-dataset-out, a fold
+    whose pool covers fewer distinct datasets with usable units is not fitted."""
+    fit = DOmegaLinear.fit if d_omega_fit is None else d_omega_fit
+    if fit_scheme == "leave_one_dataset_out":
+        return LeaveOneDatasetOut.build(fit_pool(tables), tables["units"]["dataset"].unique(),
+                                        fit=fit, min_fit_datasets=min_fit_datasets)
+    if fit_scheme == "fit_only_datasets":
+        usable = tables["fit_units"].dropna(subset=["omega", "J_classical", "J_tsfm"])
+        if usable.empty:
+            return NotFitted("d_omega", "no fit-only datasets supplied")
+        return fit(tables["fit_units"])
+    raise ValueError(f"fit_scheme must be one of {FIT_SCHEMES}, got {fit_scheme!r}")
