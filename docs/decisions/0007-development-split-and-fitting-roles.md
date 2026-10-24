@@ -1,16 +1,19 @@
 # 0007 - Development split and fitting roles
 
-- **Date:** 2026-10-10, revised 2026-10-12 after Abdullah's sign-off.
-- **Decided by:** not yet decided. Proposed by Veer. Abdullah (selector owner) signed off
+- **Date:** 2026-10-10, revised 2026-10-15 for the bounded pilot approval.
+- **Decided by:** Veer's [October 15 pilot decision on #29](https://github.com/Aadrika08/decision-aware-tsfm/issues/29#issuecomment-6185355042)
+  adopts this protocol for the exact bounded pilot workload. Abdullah (selector owner) signed off
   sections 1 to 4 on 2026-10-11
   ([comment on #57](https://github.com/Aadrika08/decision-aware-tsfm/pull/57#issuecomment-6111850251)),
-  and the points he raised there are settled in sections 2 and 5. Sign-off by Pratham
-  (mentor) is still to be recorded.
+  and the points he raised there are settled in sections 2 and 5. Pratham (mentor)
+  has not signed; this record does not attribute approval to him. Aadrika's operator
+  explicitly accepted Veer's decision as the bounded-pilot execution authority.
 - **Issue:** [#45](https://github.com/Aadrika08/decision-aware-tsfm/issues/45). Code:
   PR [#44](https://github.com/Aadrika08/decision-aware-tsfm/pull/44), merged into main on
   2026-10-10 (the roles work is part of #38).
-- **Status:** proposed. It becomes a decision when Pratham signs. Until then nothing below
-  is frozen and Dayson should not freeze a window table from it.
+- **Status:** approved for the 55-series bounded pilot under the linked #29 decision.
+  Its role table may be frozen for that workload. This does not authorize the final
+  study grid, held-out execution or changes to the approved workload.
 
 ## Context
 

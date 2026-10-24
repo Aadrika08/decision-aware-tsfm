@@ -3,6 +3,8 @@
 Most tests use a small hand-built cache with flat forecasts, so every expected
 number can be worked out by hand: with y = 10 and a forecast q at every
 quantile, the pinball loss at tau 0.50 is 0.5 * |10 - q| and the scale is 10.
+Those caches have no history, so they get a STATED scale table (hand_scales: the
+series' constant |y|); the roster fixture gets its computed one (#29 item 7a).
 A unit with n origins spaced one horizon apart has floor(n / 3) validation
 origins and no gap, so with 12 origins the validation origins are indices 0..3.
 """
@@ -28,9 +30,10 @@ from decision_aware_tsfm.analysis.decision.guards import HeldOutLeakError
 from decision_aware_tsfm.analysis.decision.metrics import TAU_GRID
 from decision_aware_tsfm.analysis.decision.pipeline import build_tables, run
 from decision_aware_tsfm.analysis.decision.run_representatives import main as run_representatives
+from decision_aware_tsfm.analysis.decision.scale import read_workload_sources
 from decision_aware_tsfm.analysis.experiments.e2 import FrozenFileError
 
-from . import _shared
+from . import _shared, _sources
 from .test_decision_producer import write_bundle
 
 QCOLS = [qcol(t) for t in TAU_GRID]
@@ -70,7 +73,18 @@ def make_cache(models, units=(UNIT,), seeds=(0,)):
     return fc
 
 
+def hand_scales(fc):
+    """A stated scale per series: the fixture's computed table for the roster fixture,
+    and the series' constant |y| for a hand-built cache (10, or 0 for a zero series)."""
+    if fc["dataset"].str.startswith("fx_").all():
+        return _shared.scales()
+    g = fc.groupby(["dataset", "config", "series_id"], sort=True)
+    return pd.DataFrame(dict(scale=g["y"].apply(lambda y: float(np.abs(y).mean())),
+                             history_end=g["origin"].min())).reset_index()
+
+
 def best(fc, family=FAMILY, **kw):
+    kw.setdefault("scales", hand_scales(fc))
     return rep.best_of_family(fc, FIXTURE_SCHEMA, family, **kw)
 
 
@@ -161,7 +175,7 @@ class ValidationOnly(unittest.TestCase):
         p = best(fc, ROSTER_FAMILY_OF_MODEL)
         for model in p["candidates"]["classical"]:
             t = build_tables(fc, FIXTURE_SCHEMA, {"classical": model, "tsfm": "Moirai-small"},
-                             ROSTER_FAMILY_OF_MODEL, omega)
+                             ROSTER_FAMILY_OF_MODEL, omega, scales=_shared.scales())
             v = t["val"][np.isclose(t["val"].tau, 0.5)]
             self.assertEqual(len(v), scores(p)[model]["n_units_scored"])
             self.assertAlmostEqual(float((v.J_classical / v.scale).mean()),
@@ -335,9 +349,10 @@ class Guards(unittest.TestCase):
                 with self.assertRaisesRegex(HeldOutLeakError, "representative selection", msg=name):
                     best(fc)
                 with self.assertRaisesRegex(HeldOutLeakError, "representative selection", msg=name):
-                    rep.fixed_named(fc, FIXTURE_SCHEMA, FAMILY, named)
+                    rep.fixed_named(fc, FIXTURE_SCHEMA, FAMILY, named, scales=hand_scales(self.fc))
             with self.assertRaises(HeldOutLeakError, msg=name):
-                rep.representative_robustness(fc, FIXTURE_SCHEMA, FAMILY, None, 0.45, tsfm="T")
+                rep.representative_robustness(fc, FIXTURE_SCHEMA, FAMILY, None, 0.45, tsfm="T",
+                                              scales=hand_scales(self.fc))
 
     def test_input_fingerprint_ignores_row_order_and_sees_every_value(self):
         fc = make_cache(SPLIT, units=[UNIT, dict(UNIT, series_id="d1/s1", horizon=2, n=9)], seeds=(42, 43))
@@ -355,19 +370,20 @@ class Guards(unittest.TestCase):
     def test_scoring_refuses_evaluation_rows(self):
         rows = assign_roles(self.fc.assign(family=self.fc.model.map(FAMILY)), 1 / 3)
         self.assertEqual(set(rows.role), {"validation", "test"})
+        sc = hand_scales(self.fc)
         with self.assertRaisesRegex(rep.EvaluationRowsError, "test"):
-            rep.validation_unit_losses(rows)
+            rep.validation_unit_losses(rows, sc)
         with self.assertRaisesRegex(rep.EvaluationRowsError, "test"):
-            rep.validation_unit_losses(rows[rows.role == "test"])
+            rep.validation_unit_losses(rows[rows.role == "test"], sc)
         with self.assertRaisesRegex(rep.EvaluationRowsError, "no role column"):
-            rep.validation_unit_losses(rows.drop(columns="role"))
-        ok = rep.validation_unit_losses(rows[rows.role == "validation"])
+            rep.validation_unit_losses(rows.drop(columns="role"), sc)
+        ok = rep.validation_unit_losses(rows[rows.role == "validation"], sc)
         self.assertEqual(len(ok), 4)
 
     def test_scoring_refuses_gap_rows(self):
         rows = assign_roles(self.fc.assign(family=self.fc.model.map(FAMILY)), 1 / 3)
         with self.assertRaisesRegex(rep.EvaluationRowsError, "gap"):
-            rep.validation_unit_losses(rows.assign(role="gap"))
+            rep.validation_unit_losses(rows.assign(role="gap"), hand_scales(self.fc))
 
     def test_family_labels_must_be_complete_and_consistent(self):
         with self.assertRaisesRegex(CacheError, "no family label"):
@@ -416,7 +432,8 @@ class FixedNamed(unittest.TestCase):
         self.fc = make_cache(SPLIT)
 
     def _named(self, reps, fc=None, family=FAMILY):
-        return rep.fixed_named(self.fc if fc is None else fc, FIXTURE_SCHEMA, family, reps)
+        fc = self.fc if fc is None else fc
+        return rep.fixed_named(fc, FIXTURE_SCHEMA, family, reps, scales=hand_scales(fc))
 
     def test_named_representatives_are_taken_and_scores_still_recorded(self):
         p = self._named({"classical": "C", "tsfm": "T"})
@@ -484,7 +501,7 @@ class FrozenFile(unittest.TestCase):
         rep.freeze(best(fc, ROSTER_FAMILY_OF_MODEL), path)
         reps = rep.load_representatives(path)
         t = build_tables(fc, FIXTURE_SCHEMA, reps, ROSTER_FAMILY_OF_MODEL, omega,
-                         fit_only_datasets=FIT_ONLY_DATASETS)
+                         fit_only_datasets=FIT_ONLY_DATASETS, scales=_shared.scales())
         res, _ = run(t, reps, FIXTURE_STATIC_THRESHOLD)
         self.assertEqual(set(res.chosen_model.dropna()), set(reps.values()))
         self.assertEqual(t["settings"]["representatives"], reps)
@@ -596,13 +613,18 @@ class Command(unittest.TestCase):
         self.assertEqual(path.read_bytes(), first)
 
     def test_handoff_bundle_and_parquet_give_the_api_result(self):
-        fc = make_cache(SPLIT, seeds=(42, 43))
+        fc = make_cache(SPLIT, seeds=(42, 43)).assign(origin=lambda d: d["origin"] + 48)  # room for history
         frame = to_producer_format(fc, FAMILY)
-        write_bundle(self.root / "bundle", frame)
+        workload, hashes = _sources.write_workload(self.root / "bundle", fc)
+        write_bundle(self.root / "bundle", frame, source_hashes=hashes)
         text = quiet([str(self.root / "bundle"), "--variant", "current", "--out", str(self.root / "b.json")])
         self.assertIn("SYNTHETIC FIXTURE", text)                     # write_bundle marks fixture=True
         got = rep.load_frozen(self.root / "b.json")
-        want = rep.best_of_family(frame, PRODUCER_SCHEMA, FAMILY, source=got["input"]["source"])
+        scales = read_workload_sources(workload).scales
+        h = _sources.stepped_history(48)                    # the history before origin 48
+        self.assertEqual(float(scales["scale"].iloc[0]), float(np.mean(np.abs(h[24:] - h[:-24]))))
+        want = rep.best_of_family(frame, PRODUCER_SCHEMA, FAMILY, source=got["input"]["source"],
+                                  scales=scales)
         self.assertEqual(got, want)
         self.assertEqual(got["representatives"], {"classical": "A", "tsfm": "T"})
         self.assertEqual(got["input"]["source"]["kind"], "handoff bundle")
@@ -611,7 +633,8 @@ class Command(unittest.TestCase):
         self.assertEqual(got["input"]["sha256"], best(fc)["input"]["sha256"])
 
         frame.to_parquet(self.root / "cache.parquet", index=False)
-        text = quiet([str(self.root / "cache.parquet"), "--out", str(self.root / "p.json")])
+        text = quiet([str(self.root / "cache.parquet"), "--workload", str(workload),
+                      "--out", str(self.root / "p.json")])
         self.assertNotIn("SYNTHETIC", text)
         self.assertEqual(rep.load_frozen(self.root / "p.json")["scores"], want["scores"])
 
@@ -638,7 +661,7 @@ class Robustness(unittest.TestCase):
         cls.fc, cls.omega = make_roster_fixture(7)
         cls.table = rep.representative_robustness(
             cls.fc, FIXTURE_SCHEMA, ROSTER_FAMILY_OF_MODEL, cls.omega, FIXTURE_STATIC_THRESHOLD,
-            tsfm="Moirai-small", fit_only_datasets=FIT_ONLY_DATASETS)
+            tsfm="Moirai-small", fit_only_datasets=FIT_ONLY_DATASETS, scales=_shared.scales())
 
     def test_one_block_of_seven_selectors_per_classical_candidate(self):
         t = self.table
@@ -661,7 +684,7 @@ class Robustness(unittest.TestCase):
         t = rep.representative_robustness(
             self.fc, FIXTURE_SCHEMA, ROSTER_FAMILY_OF_MODEL, self.omega, FIXTURE_STATIC_THRESHOLD,
             tsfm="Moirai-small", classical=["SeasonalNaive"], by=("selector", "horizon"),
-            fit_only_datasets=FIT_ONLY_DATASETS)
+            fit_only_datasets=FIT_ONLY_DATASETS, scales=_shared.scales())
         self.assertEqual(set(t.classical_representative), {"SeasonalNaive"})
         self.assertEqual(len(t), 7 * 2)
 

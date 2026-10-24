@@ -17,7 +17,7 @@ N_ORIGINS = 8
 
 def _per_origin(pairs):
     """Hand-built engine per-origin table, test origins only. pairs: one (classical, tsfm)
-    cost pair per series, paid at EVERY origin (one target per origin, |y| = 1), so the
+    cost pair per series, paid at EVERY origin (one target per origin, series scale 1), so the
     two families of a unit are as far apart on any resample as on the original table."""
     rows = []
     for i, pair in enumerate(pairs):
@@ -25,7 +25,7 @@ def _per_origin(pairs):
             rows.append(pd.DataFrame(dict(dataset="hand", config="c", series_id=f"s{i:02d}", horizon=1,
                                           origin=np.arange(N_ORIGINS), family=family, tau=0.5,
                                           pinball_sum=float(cost), crps_sum=float(cost),
-                                          abs_y_sum=1.0, n=1, role="test")))
+                                          scale=1.0, n=1, role="test")))
     return pd.concat(rows, ignore_index=True)
 
 

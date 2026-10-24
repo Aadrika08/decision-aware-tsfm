@@ -1,0 +1,151 @@
+{
+  "evidence_kind": "bounded_pilot_service_resume_snapshot",
+  "observed_at": "2026-10-15T17:40:29.450119+00:00",
+  "frozen_code_commit": "d2e1b1b40334ee89207be3eab4078b0d291d346a",
+  "full_pilot_status": "running",
+  "preserved_verified_partitions": 49,
+  "preserved_hashes_sha256": "6b95f19e2863d7cda685074cd825d8b959b06ffd780fb78b12ee58962e7cf759",
+  "post_interruption_audit_sha256": "ffe7c9577aa55bb76118edec9f996945e79d6ecb61525d9b375dd9842020c5ea",
+  "recovered_samples": {
+    "count": 25,
+    "original_run_id": "65373ea1dc8c47d8aa495470d531462b",
+    "report_sha256": "30c784d60e56f78b8fc1d71fec1a0395120fc94b5eef4412756cacf00a40ef5e",
+    "original_events_sha256": "e9e7b0993d062b045ef9fe285904f589352e34fc5712a94bf25c9fe9c54364d1",
+    "interrupted_wall_seconds": null,
+    "interrupted_peak_rss_kib": null
+  },
+  "services": {
+    "measurement": {
+      "unit": "decision-aware-pilot-29-20261015.service",
+      "pid": 2662309,
+      "requested_at": "2026-10-15T17:39:16.730890+00:00",
+      "properties": {
+        "Restart": "no",
+        "MemoryHigh": "2G",
+        "MemoryMax": "3G",
+        "MemorySwapMax": "1G",
+        "OOMPolicy": "stop",
+        "KillMode": "control-group",
+        "TimeoutStopSec": "30",
+        "RemainAfterExit": "yes"
+      },
+      "confirmed_service": {
+        "ActiveState": "active",
+        "SubState": "running",
+        "Restart": "no",
+        "MainPID": "2662309",
+        "Result": "success",
+        "NRestarts": "0",
+        "OOMPolicy": "stop",
+        "ControlGroup": "/user.slice/user-1000.slice/user@1000.service/app.slice/decision-aware-pilot-29-20261015.service",
+        "MemoryHigh": "2147483648",
+        "MemoryMax": "3221225472",
+        "MemorySwapMax": "1073741824",
+        "KillMode": "control-group"
+      },
+      "supervisor_sha256": "95a1a62a9115475907add61278f0e596ec7263b4d87f5b35319b20377dc83ea2"
+    },
+    "monitor": {
+      "unit": "decision-aware-pilot-monitor-29-20261015.service",
+      "pid": 2662791,
+      "requested_at": "2026-10-15T17:39:28.681111+00:00",
+      "properties": {
+        "Restart": "no",
+        "MemoryHigh": "2G",
+        "MemoryMax": "3G",
+        "MemorySwapMax": "1G",
+        "OOMPolicy": "stop",
+        "KillMode": "control-group",
+        "TimeoutStopSec": "30",
+        "RemainAfterExit": "yes"
+      },
+      "confirmed_service": {
+        "ActiveState": "active",
+        "SubState": "running",
+        "Restart": "no",
+        "MainPID": "2662791",
+        "Result": "success",
+        "NRestarts": "0",
+        "OOMPolicy": "stop",
+        "ControlGroup": "/user.slice/user-1000.slice/user@1000.service/app.slice/decision-aware-pilot-monitor-29-20261015.service",
+        "MemoryHigh": "2147483648",
+        "MemoryMax": "3221225472",
+        "MemorySwapMax": "1073741824",
+        "KillMode": "control-group"
+      },
+      "supervisor_sha256": "95a1a62a9115475907add61278f0e596ec7263b4d87f5b35319b20377dc83ea2"
+    }
+  },
+  "completion_status": {
+    "phase": "running_full_pilot",
+    "updated_at": "2026-10-15T17:40:29.450119+00:00",
+    "supervisor_pid": 2662791,
+    "measurement_pid": 2662309,
+    "measurement_unit": "decision-aware-pilot-29-20261015.service",
+    "published_partition_files": 50,
+    "planned_jobs": 21696,
+    "service": {
+      "ActiveState": "active",
+      "SubState": "running",
+      "MainPID": "2662309",
+      "Result": "success",
+      "NRestarts": "0",
+      "OOMPolicy": "stop",
+      "ControlGroup": "/user.slice/user-1000.slice/user@1000.service/app.slice/decision-aware-pilot-29-20261015.service",
+      "MemoryCurrent": "625541120",
+      "MemoryPeak": "710754304",
+      "MemoryHigh": "2147483648",
+      "MemoryMax": "3221225472",
+      "MemorySwapMax": "1073741824"
+    }
+  },
+  "attempt_accounting_status": "incomplete",
+  "limitations": [
+    "Snapshot is not a live progress counter",
+    "User services require the host awake and an active user manager; no reboot resume configured",
+    "The memory cap can stop a run; automatic restart is disabled",
+    "Killed-run wall/RSS and canceled work cannot be reconstructed from successful events",
+    "Throughput is conditional on different recorded memory guards across phases"
+  ],
+  "launcher_sha256": "1245b8ca89f5e1f92d875c284e478959857bc54d95d33089e8be1a246701c65d",
+  "initial_cgroup_snapshot_sha256": "f91c2f3b4177f17f7051cf93a378ede1e62f11296aae339009588259ce54c6b2",
+  "initial_cgroup_snapshot": {
+    "observed_at": "2026-10-15T17:41:28.251328+00:00",
+    "services": {
+      "decision-aware-pilot-29-20261015.service": {
+        "ActiveState": "active",
+        "Result": "success",
+        "ExecMainCode": "0",
+        "ExecMainStatus": "0",
+        "ControlGroup": "/user.slice/user-1000.slice/user@1000.service/app.slice/decision-aware-pilot-29-20261015.service",
+        "kernel_memory": {
+          "memory.current": "626589696\n",
+          "memory.peak": "710754304\n",
+          "memory.high": "2147483648\n",
+          "memory.max": "3221225472\n",
+          "memory.swap.current": "0\n",
+          "memory.swap.max": "1073741824\n",
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0\n",
+          "memory.pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=38267\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=38267\n"
+        }
+      },
+      "decision-aware-pilot-monitor-29-20261015.service": {
+        "ActiveState": "active",
+        "Result": "success",
+        "ExecMainCode": "0",
+        "ExecMainStatus": "0",
+        "ControlGroup": "/user.slice/user-1000.slice/user@1000.service/app.slice/decision-aware-pilot-monitor-29-20261015.service",
+        "kernel_memory": {
+          "memory.current": "151973888\n",
+          "memory.peak": "161796096\n",
+          "memory.high": "2147483648\n",
+          "memory.max": "3221225472\n",
+          "memory.swap.current": "0\n",
+          "memory.swap.max": "1073741824\n",
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0\n",
+          "memory.pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n"
+        }
+      }
+    }
+  }
+}

@@ -16,8 +16,9 @@ This module reports that quantity divided by the unit's scale:
     delta = J_tsfm / scale  -  J_classical / scale
 
 where J_f is the unit's mean pinball loss at tau for family f's representative
-over the unit's test origins and scale is the engine's scale (mean |y| over the
-same targets, always positive, so the sign is the overview's). delta < 0 means
+over the unit's test origins and scale is the engine's scale (the series'
+seasonal-naive MAE, season 24, on its history before the first origin, #29
+item 7a; always positive, so the sign is the overview's). delta < 0 means
 TSFM is the lower-cost family; delta > 0 means classical is. The E3 code uses
 the same orientation. A unit whose two SCALED costs are equal within 1e-12
 (relative, with an absolute floor of 1e-12) is a tie: it counts for neither
@@ -361,7 +362,8 @@ def run_e1(tables: dict, selection: pd.DataFrame, grid=TAU_GRID) -> dict:
 
 def main(argv=None):
     from ..decision.fixture import (FAMILY_OF_MODEL, FIT_ONLY_DATASETS, FIXTURE_SCHEMA,
-                                    FIXTURE_STATIC_THRESHOLD, REPRESENTATIVES, make_fixture)
+                                    FIXTURE_STATIC_THRESHOLD, REPRESENTATIVES, make_fixture,
+                                    make_fixture_scales)
     from ..decision.pipeline import build_tables, run
 
     ap = argparse.ArgumentParser(description="E1 on the synthetic fixture (interface check only)")
@@ -378,7 +380,7 @@ def main(argv=None):
 
     fc, omega, _ = make_fixture(a.seed)
     tables = build_tables(fc, FIXTURE_SCHEMA, REPRESENTATIVES, FAMILY_OF_MODEL, omega,
-                          fit_only_datasets=FIT_ONLY_DATASETS)
+                          fit_only_datasets=FIT_ONLY_DATASETS, scales=make_fixture_scales(a.seed))
     selection, _ = run(tables, REPRESENTATIVES, FIXTURE_STATIC_THRESHOLD)
     r = run_e1(tables, selection)
 

@@ -4,6 +4,11 @@
         --variant current --classical AutoETS --tsfm Moirai-small \
         --static-threshold 0.45 --fit-only-datasets fx_dfit --out artifacts/runs/decision-handoff
 
+The series scale (#29 item 7a) is computed from the workload's source files:
+BUNDLE/workload.json or --workload FILE, with source_path relative to the
+workload's folder or to --sources DIR. Every source hash is checked; a missing
+workload or source stops the check.
+
 Reads the bundle (hashes, provenance, Omega join), runs all seven comparators,
 and recomputes every test-period cost directly from the raw quantile columns as
 an independent check that the engine reads the right column for each tau.
@@ -22,6 +27,7 @@ from .cache_io import qcol
 from .handoff import read_handoff
 from .metrics import TAU_GRID
 from .pipeline import FIT_SCHEMES, build_tables, run
+from .scale import check_bundle_against_sources, read_workload_sources
 
 
 def direct_test_costs(forecasts: pd.DataFrame, per_origin: pd.DataFrame,
@@ -55,12 +61,19 @@ def main(argv=None):
     ap.add_argument("--fit-scheme", choices=FIT_SCHEMES, default="leave_one_dataset_out")
     ap.add_argument("--min-fit-datasets", type=int, default=3,
                     help="other datasets a leave-one-dataset-out fold needs (decision record 0007: 3)")
+    ap.add_argument("--workload", type=Path,
+                    help="workload.json naming each series' source (default BUNDLE/workload.json)")
+    ap.add_argument("--sources", type=Path,
+                    help="folder the workload's source_path entries are relative to "
+                         "(default: the workload's folder)")
     ap.add_argument("--out", type=Path, required=True)
     a = ap.parse_args(argv)
     if a.out.exists():
         raise SystemExit(f"--out {a.out} already exists; choose a new directory")
 
     forecasts, omega, report = read_handoff(a.bundle, a.variant)
+    sources = read_workload_sources(a.workload or a.bundle / "workload.json", a.sources)
+    source_check = check_bundle_against_sources(forecasts, omega, sources)
     reps = {"classical": a.classical, "tsfm": a.tsfm}
     family_of_model = forecasts.groupby("model")["family"].first().to_dict()
     tables = build_tables(forecasts, "producer-v1", reps, family_of_model, omega,
@@ -68,7 +81,7 @@ def main(argv=None):
                           omega_col="omega", omega_variant=a.variant,
                           # interface check: a bundle may have too few origins per series for a
                           # validation third; keep those series so every column is still checked
-                          exclude_without_validation=False)
+                          exclude_without_validation=False, scales=sources.scales)
     res, d_omega = run(tables, reps, a.static_threshold, fit_scheme=a.fit_scheme,
                        min_fit_datasets=a.min_fit_datasets)
 
@@ -86,6 +99,9 @@ def main(argv=None):
         schema="producer-v1", representatives=reps, static_threshold=a.static_threshold,
         fit_only_datasets=list(a.fit_only_datasets), val_fraction=a.val_fraction,
         fit_scheme=a.fit_scheme, d_omega=d_omega.describe(),
+        scale=sources.report, source_check=source_check,
+        excluded_series_horizons={str(r): int(n) for r, n in
+                                  tables["excluded_series_horizons"].groupby("reason").size().items()},
         series_without_validation_kept="interface check only; an analysis run excludes them",
         evaluation_units=int(len(tables["units"])), result_rows=int(len(res)),
         status_counts={f"{s}/{st}": int(n) for (s, st), n in res.groupby(["selector", "status"]).size().items()},

@@ -20,9 +20,11 @@ What best_of_family computes
      of a role other than validation is dropped BEFORE any loss is computed.
   2. Unit loss. Per model and per unit (dataset, config, series_id, horizon):
      J = mean pinball at tau 0.50 over the unit's validation targets, seeds
-     averaged as in costs.per_origin_costs, and scale = mean |y| over the same
-     targets. These are the engine's J and scale (costs.unit_costs), on
-     validation origins instead of test origins.
+     averaged as in costs.per_origin_costs, and scale = the series' scale
+     (scale.py: seasonal-naive MAE, season 24, of the history before the
+     series' first origin, #29 item 7a), joined by scale.attach_scale exactly
+     as the engine joins it. These are the engine's J and scale
+     (costs.unit_costs), on validation origins instead of test origins.
   3. loss="scaled" (default): a unit counts J / scale, the engine's scaled
      cost, so a series measured in large numbers cannot choose the
      representative on its own. loss="raw": a unit counts J. Both are written
@@ -32,7 +34,7 @@ What best_of_family computes
      ones the roles were assigned from, so the window scored here is the
      validation window the engine derives when that model is the
      representative. A family's models are compared on the units ALL of them
-     cover (and whose validation scale is not 0); a model cannot win by
+     cover (and whose series scale is usable); a model cannot win by
      missing a hard series or horizon.
   5. Score. The plain mean of the unit losses over those common units, every
      unit weighing the same.
@@ -75,6 +77,7 @@ from .evaluate import summarize
 from .guards import assert_no_held_out
 from .metrics import TAU_GRID, check_taus
 from .pipeline import build_tables, run
+from .scale import SCALE_KIND, attach_scale, check_scale_table, table_sha256
 from .schema import FAMILIES
 from .selectors import TIE_RTOL
 
@@ -96,9 +99,10 @@ ORIGINS_STATEMENT = (
     "the coverage check and the input fingerprint.")
 AGGREGATION = (
     "per model and per unit (dataset, config, series_id, horizon): mean pinball loss at tau 0.50 over "
-    "the unit's validation targets, seeds averaged; scaled = that mean divided by mean |y| over the "
-    "same targets, raw = that mean; score = plain mean over the units every candidate of the family "
-    "covers, each unit weighing the same")
+    "the unit's validation targets, seeds averaged; scaled = that mean divided by the series' scale "
+    "(seasonal-naive MAE, season 24, of the history before the series' first origin; #29 item 7a), "
+    "raw = that mean; score = plain mean over the units every candidate of the family covers, each "
+    "unit weighing the same")
 TIE_RULE = ("lowest score wins; scores within tie_rtol (relative) of the lowest are a tie, and a tie "
             "goes to the model whose name sorts first")
 
@@ -158,9 +162,10 @@ def _covering(fc: pd.DataFrame) -> pd.DataFrame:
     return own.loc[own["n_own"] == own["n_ref"], SERIES_KEYS + ["model"]]
 
 
-def validation_unit_losses(rows: pd.DataFrame, taus=TAU_GRID) -> pd.DataFrame:
+def validation_unit_losses(rows: pd.DataFrame, scales: pd.DataFrame, taus=TAU_GRID) -> pd.DataFrame:
     """One row per (unit, family, model): J = mean pinball at SELECTION_TAU over
-    the unit's targets, scale = mean |y| over the same targets, n_origins.
+    the unit's targets, scale = the series' scale from `scales` (NaN where it is
+    0 or undefined), n_origins.
 
     rows: canonical forecast rows with `family` and `role` columns. EVERY row
     must have role validation; anything else raises EvaluationRowsError, so
@@ -175,13 +180,12 @@ def validation_unit_losses(rows: pd.DataFrame, taus=TAU_GRID) -> pd.DataFrame:
     cols = SERIES_KEYS + ["family", "model", "J", "scale", "n_origins"]
     if rows.empty:
         return pd.DataFrame(columns=cols)
-    po = per_origin_costs(rows, taus)
+    po = attach_scale(per_origin_costs(rows, taus), scales, "representative selection")
     po = po[np.isclose(po["tau"], SELECTION_TAU, rtol=0, atol=1e-9)]
     u = po.groupby(SERIES_KEYS + ["family", "model"], sort=True).agg(
-        pinball_sum=("pinball_sum", "sum"), abs_y_sum=("abs_y_sum", "sum"), n=("n", "sum"),
+        pinball_sum=("pinball_sum", "sum"), scale=("scale", "first"), n=("n", "sum"),
         n_origins=("origin", "nunique")).reset_index()
     u["J"] = u.pinball_sum / u.n
-    u["scale"] = u.abs_y_sum / u.n
     return u[cols]
 
 
@@ -193,7 +197,8 @@ def _pick(score: dict[str, float]) -> tuple[str, str]:
     return tied[0], ("lowest_validation_loss" if len(tied) == 1 else "tie_first_by_name")
 
 
-def _select(forecasts, schema_version, family_of_model, rule, named, val_fraction, loss, taus, source):
+def _select(forecasts, schema_version, family_of_model, rule, named, val_fraction, loss, taus, source,
+            scales):
     if loss not in LOSSES:
         raise ValueError(f"loss must be one of {LOSSES}, got {loss!r}")
     if not 0 < val_fraction < 1:
@@ -204,6 +209,7 @@ def _select(forecasts, schema_version, family_of_model, rule, named, val_fractio
     fc = load_cache(forecasts, schema_version, taus)
     assert_no_held_out(fc["dataset"], "representative selection")
     assert_no_held_out(fc["config"], "representative selection")
+    check_scale_table(scales)                          # no scale table: stop before any loss
     # sorted once, so sums, scores and the frozen file do not depend on the row order of the input
     fc = fc.sort_values(KEY_COLS).reset_index(drop=True)
     lab = _labelled(fc, family_of_model)
@@ -215,16 +221,18 @@ def _select(forecasts, schema_version, family_of_model, rule, named, val_fractio
     if rule == "fixed_named":
         restrict_to_representatives(fc, named, family_of_model)      # the engine's own checks
 
+    # every series needs its scale, and its history must end before the series' first origin
+    attach_scale(fc[SERIES_KEYS[:3] + ["origin"]].drop_duplicates(), scales, "representative selection")
     rows = assign_roles(lab, val_fraction)
     by_role = rows[SERIES_KEYS + ["origin", "role"]].drop_duplicates()["role"].value_counts()
-    u = validation_unit_losses(rows[rows["role"] == SCORED_ROLE], taus)
+    u = validation_unit_losses(rows[rows["role"] == SCORED_ROLE], scales, taus)
     u = u.merge(_covering(lab), on=SERIES_KEYS + ["model"])
 
     chosen, reasons, best_by_loss, coverage, scores = {}, {}, {}, {}, []
     for fam in FAMILIES:
         cands = candidates[fam]
         uf = u[u["family"] == fam]
-        zero = uf["scale"] <= 0                # scaled loss undefined: listed in the counts, not scored
+        zero = ~(uf["scale"] > 0)              # 0 or undefined scale: listed in the counts, not scored
         n_zero = int(len(uf.loc[zero, SERIES_KEYS].drop_duplicates()))
         uf = uf[~zero]
         common = uf[uf.groupby(SERIES_KEYS)["model"].transform("nunique") == len(cands)]
@@ -264,7 +272,7 @@ def _select(forecasts, schema_version, family_of_model, rule, named, val_fractio
     payload = dict(
         schema=FROZEN_SCHEMA, rule=rule, representatives=chosen, reasons=reasons,
         selection=dict(tau=SELECTION_TAU, loss=loss, unit=list(SERIES_KEYS), tie_rtol=TIE_RTOL,
-                       aggregation=AGGREGATION, tie_rule=TIE_RULE),
+                       aggregation=AGGREGATION, tie_rule=TIE_RULE, scale=SCALE_KIND),
         best_by_loss=best_by_loss, val_fraction=float(val_fraction), roles_scored=[SCORED_ROLE],
         origins_statement=ORIGINS_STATEMENT, candidates=candidates, scores=scores, coverage=coverage,
         n_origins_by_role={r: int(by_role.get(r, 0)) for r in costs.ROLES},
@@ -274,15 +282,22 @@ def _select(forecasts, schema_version, family_of_model, rule, named, val_fractio
                    configs=sorted(str(x) for x in fc["config"].unique()),
                    horizons=sorted(int(x) for x in fc["horizon"].unique()),
                    seeds=sorted(int(x) for x in fc["seed"].unique()),
-                   tau_grid=[float(x) for x in grid], source=dict(source or {})),
+                   tau_grid=[float(x) for x in grid], source=dict(source or {}),
+                   scales_sha256=table_sha256(_cache_scales(fc, scales))),
         code_sha256=code_sha256())
     payload = json.loads(_canonical(payload))       # plain JSON types; raises on NaN
     _check_payload(payload, rule)
     return payload
 
 
+def _cache_scales(fc: pd.DataFrame, scales: pd.DataFrame) -> pd.DataFrame:
+    """The rows of the scale table for the series in the cache (what was used)."""
+    s = check_scale_table(scales)
+    return s.merge(fc[SERIES_KEYS[:3]].drop_duplicates(), on=SERIES_KEYS[:3], how="inner")
+
+
 def best_of_family(forecasts, schema_version, family_of_model, val_fraction=1 / 3, loss="scaled",
-                   taus=TAU_GRID, source=None) -> dict:
+                   taus=TAU_GRID, source=None, scales=None) -> dict:
     """Choose, per family, the model with the lowest mean pinball loss at tau 0.50
     over validation origins (module docstring, steps 1 to 6).
 
@@ -291,20 +306,22 @@ def best_of_family(forecasts, schema_version, family_of_model, val_fraction=1 / 
     val_fraction               the validation share of each (series, horizon)'s origins
     loss                       "scaled" (default) or "raw"
     source                     optional provenance to record with the input, e.g. a bundle hash
+    scales                     the series scale table (scale.py), required: the same table
+                               the engine is given
     Returns the payload that freeze() writes; payload["representatives"] is the dict
     the engine takes."""
     return _select(forecasts, schema_version, family_of_model, "best_of_family", None,
-                   val_fraction, loss, taus, source)
+                   val_fraction, loss, taus, source, scales)
 
 
 def fixed_named(forecasts, schema_version, family_of_model, representatives, val_fraction=1 / 3,
-                loss="scaled", taus=TAU_GRID, source=None) -> dict:
+                loss="scaled", taus=TAU_GRID, source=None, scales=None) -> dict:
     """Take the caller's {family: model} as the representatives. They are checked
     by cache_io.restrict_to_representatives on this cache, so whatever the engine
     would refuse is refused here. The validation scores of every candidate are
     still recorded, for comparison with best_of_family; they do not affect the choice."""
     return _select(forecasts, schema_version, family_of_model, "fixed_named", representatives,
-                   val_fraction, loss, taus, source)
+                   val_fraction, loss, taus, source, scales)
 
 
 def score_table(payload: dict) -> pd.DataFrame:
@@ -408,7 +425,7 @@ def load_representatives(path) -> dict[str, str]:
 
 def representative_robustness(forecasts, schema_version, family_of_model, omega, static_threshold,
                               tsfm, classical=None, by=("selector",),
-                              fit_scheme="leave_one_dataset_out", min_fit_datasets=2,
+                              fit_scheme="leave_one_dataset_out", min_fit_datasets=3,
                               **build_kw) -> pd.DataFrame:
     """Does the conclusion depend on the classical representative?
 
@@ -417,7 +434,8 @@ def representative_robustness(forecasts, schema_version, family_of_model, omega,
     evaluate.summarize(by=by) with a classical_representative column.
 
     classical  the candidates; None means every classical model in the cache.
-    build_kw   passed to build_tables (fit_only_datasets, omega_col, omega_variant, ...).
+    build_kw   passed to build_tables (scales, fit_only_datasets, omega_col, omega_variant, ...).
+    min_fit_datasets  3 by default, as the engine and decision 6 on #29 (#61).
 
     THIS READS EVALUATION ORIGINS. It is an analysis of results, to run after
     the rule and the primary representatives are frozen. Never choose a

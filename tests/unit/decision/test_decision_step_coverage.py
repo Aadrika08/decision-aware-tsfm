@@ -11,7 +11,7 @@ from decision_aware_tsfm.analysis.decision import pipeline
 from decision_aware_tsfm.analysis.decision.cache_io import (
     TARGET_KEYS, CacheError, DuplicateCacheKeyError, load_cache)
 from decision_aware_tsfm.analysis.decision.fixture import (
-    FLAT_FAMILY_OF_MODEL, FLAT_REPRESENTATIVES, PRODUCER_SCHEMA, flat_fixture_producer)
+    FLAT_FAMILY_OF_MODEL, FLAT_REPRESENTATIVES, PRODUCER_SCHEMA, flat_fixture_producer, stated_scales)
 from decision_aware_tsfm.analysis.decision.handoff import read_handoff
 from decision_aware_tsfm.analysis.decision.pipeline import build_tables, run
 
@@ -44,7 +44,7 @@ def restep(frame, old, new):
 
 def _oracle_at_half(frame):
     t = build_tables(frame, PRODUCER_SCHEMA, FLAT_REPRESENTATIVES, FLAT_FAMILY_OF_MODEL, FLAT_OMEGA,
-                     omega_col="omega", val_fraction=0)
+                     omega_col="omega", val_fraction=0, scales=stated_scales(frame))
     res, _ = run(t, FLAT_REPRESENTATIVES, 0.45)
     return res[(res.selector == "hindsight_oracle") & (res.tau == 0.5)].iloc[0]
 
@@ -56,7 +56,7 @@ class StepCoverage(unittest.TestCase):
         o = _oracle_at_half(flat_with_spike())
         self.assertEqual(o.chosen_family, "tsfm")
         self.assertAlmostEqual(o.realized_cost, 253 / 12, places=12)   # (23 * 0.5 + 494.5) / 24
-        self.assertAlmostEqual(o.scale, 51.25, places=12)              # (23 * 10 + 1000) / 24
+        self.assertEqual(o.scale, 1.0)        # stated scale (stated_scales); mean |y| would be 51.25
 
     def test_review_case_missing_step_hidden_by_the_other_seed_is_refused(self):
         # the case from the #44 review: this was accepted, and the tau=0.50 oracle moved from
@@ -88,7 +88,8 @@ class StepCoverage(unittest.TestCase):
             self.assertEqual((rep["partitions_hash_verified"], rep["rows"]), (len(hashes), len(bad)))
             with self.assertRaisesRegex(CacheError, INCOMPLETE):
                 build_tables(fc, PRODUCER_SCHEMA, FLAT_REPRESENTATIVES, FLAT_FAMILY_OF_MODEL, omega,
-                             omega_col="omega", omega_variant="current", val_fraction=0)
+                             omega_col="omega", omega_variant="current", val_fraction=0,
+                             scales=stated_scales(fc))
 
     def test_any_missing_step_is_refused(self):
         for step in (1, 12, H):
@@ -136,7 +137,7 @@ class StepCoverage(unittest.TestCase):
                 mock.patch.object(pipeline, "per_origin_costs", side_effect=later):
             with self.assertRaisesRegex(CacheError, INCOMPLETE):
                 build_tables(bad, PRODUCER_SCHEMA, FLAT_REPRESENTATIVES, FLAT_FAMILY_OF_MODEL, FLAT_OMEGA,
-                             omega_col="omega", val_fraction=0)
+                             omega_col="omega", val_fraction=0, scales=stated_scales(bad))
 
     def test_incomplete_job_of_a_model_that_is_not_a_representative_is_refused(self):
         other = flat_fixture_producer()

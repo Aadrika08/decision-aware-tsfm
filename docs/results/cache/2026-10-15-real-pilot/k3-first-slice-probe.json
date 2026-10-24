@@ -1,0 +1,202 @@
+{
+  "evidence_kind": "local_real_first_slice_consumer_probe",
+  "checked_at": "2026-10-15T19:04:28.049285+00:00",
+  "consumer": "Abdullah K3 input loader",
+  "source_commit": "e3b7e17e54e94439fc78a38057273473e6bc7985",
+  "loader_source_sha256": "46fb6b535f4577f08f193b383f921825eb7838576ef336fac20a4dc70a874b27",
+  "handoff_sha256": "96a6dcd295d91f3a4887c27fa3fd315dfec2c3e664675db35f1457857d6719c7",
+  "fixture": false,
+  "model_imports": false,
+  "checks": {
+    "current": {
+      "status": "ok",
+      "provenance_required": true,
+      "naming": "dataset-config-v1",
+      "omega_sha256_verified": true,
+      "variant": "current",
+      "partitions": 24,
+      "rows": 1544,
+      "comparisons": 6,
+      "series": 1,
+      "series_origins": 1,
+      "horizons": [
+        1,
+        24,
+        168
+      ],
+      "seeds": [
+        42,
+        43
+      ],
+      "models_by_family": {
+        "classical": [
+          "autoarima_native",
+          "autoets_simulated",
+          "seasonal_naive_native"
+        ],
+        "tsfm": [
+          "moirai_pilot"
+        ]
+      },
+      "taus": [
+        0.01,
+        0.05,
+        0.09,
+        0.25,
+        0.4,
+        0.5,
+        0.6,
+        0.75,
+        0.91,
+        0.95,
+        0.99
+      ],
+      "provenance_checked_jobs": 24,
+      "unused_omega_sources": 903,
+      "source_repository": "Salesforce/GiftEval",
+      "undefined_omega": 0,
+      "undefined_omega_statuses": {},
+      "distinct_omega": 1,
+      "distinct_datasets": 1,
+      "omega_range": [
+        0.735977,
+        0.735977
+      ],
+      "omega_band_coverage": {
+        "below_0.40": {
+          "range": [
+            null,
+            0.4
+          ],
+          "datasets": [],
+          "series_origins": 0,
+          "distinct_omega": 0
+        },
+        "0.40_to_0.50": {
+          "range": [
+            0.4,
+            0.5
+          ],
+          "datasets": [],
+          "series_origins": 0,
+          "distinct_omega": 0
+        },
+        "above_0.50": {
+          "range": [
+            0.5,
+            null
+          ],
+          "datasets": [
+            "electricity"
+          ],
+          "series_origins": 1,
+          "distinct_omega": 1
+        },
+        "undefined": {
+          "range": null,
+          "datasets": [],
+          "series_origins": 0,
+          "distinct_omega": 0
+        }
+      }
+    },
+    "last_4096": {
+      "status": "ok",
+      "provenance_required": true,
+      "naming": "dataset-config-v1",
+      "omega_sha256_verified": true,
+      "variant": "last_4096",
+      "partitions": 24,
+      "rows": 1544,
+      "comparisons": 6,
+      "series": 1,
+      "series_origins": 1,
+      "horizons": [
+        1,
+        24,
+        168
+      ],
+      "seeds": [
+        42,
+        43
+      ],
+      "models_by_family": {
+        "classical": [
+          "autoarima_native",
+          "autoets_simulated",
+          "seasonal_naive_native"
+        ],
+        "tsfm": [
+          "moirai_pilot"
+        ]
+      },
+      "taus": [
+        0.01,
+        0.05,
+        0.09,
+        0.25,
+        0.4,
+        0.5,
+        0.6,
+        0.75,
+        0.91,
+        0.95,
+        0.99
+      ],
+      "provenance_checked_jobs": 24,
+      "unused_omega_sources": 903,
+      "source_repository": "Salesforce/GiftEval",
+      "undefined_omega": 0,
+      "undefined_omega_statuses": {},
+      "distinct_omega": 1,
+      "distinct_datasets": 1,
+      "omega_range": [
+        0.382712,
+        0.382712
+      ],
+      "omega_band_coverage": {
+        "below_0.40": {
+          "range": [
+            null,
+            0.4
+          ],
+          "datasets": [
+            "electricity"
+          ],
+          "series_origins": 1,
+          "distinct_omega": 1
+        },
+        "0.40_to_0.50": {
+          "range": [
+            0.4,
+            0.5
+          ],
+          "datasets": [],
+          "series_origins": 0,
+          "distinct_omega": 0
+        },
+        "above_0.50": {
+          "range": [
+            0.5,
+            null
+          ],
+          "datasets": [],
+          "series_origins": 0,
+          "distinct_omega": 0
+        },
+        "undefined": {
+          "range": null,
+          "datasets": [],
+          "series_origins": 0,
+          "distinct_omega": 0
+        }
+      }
+    }
+  },
+  "limitations": [
+    "Local compatibility probe, not Abdullah owner acceptance",
+    "24 jobs and one origin only; no scalar boundary or full-pilot result",
+    "Full 904-origin Omega sidecar is retained;903 unused origins expected for this first slice",
+    "Full-bundle consumer time/memory remains unmeasured"
+  ]
+}

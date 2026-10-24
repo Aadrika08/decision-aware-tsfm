@@ -70,7 +70,7 @@ def _h24_tables(**build_kw):
     kw.update(build_kw)
     reps, om = kw.pop("representatives"), kw.pop("omega")
     return build_tables(fc[fc.horizon == 24], FIXTURE_SCHEMA, dict(reps), FAMILY_OF_MODEL, om,
-                        fit_only_datasets=FIT_ONLY_DATASETS, **kw)
+                        fit_only_datasets=FIT_ONLY_DATASETS, scales=_shared.scales(), **kw)
 
 
 def _forge(payload) -> dict:
@@ -365,10 +365,11 @@ class FrozenSettings(_WithFrozen):
         cases = {
             "val_fraction": _h24_tables(val_fraction=0.6),
             "omega_col": build_tables(fc[fc.horizon == 24], FIXTURE_SCHEMA, REPRESENTATIVES, FAMILY_OF_MODEL,
-                                      other, fit_only_datasets=FIT_ONLY_DATASETS, omega_col="other"),
+                                      other, fit_only_datasets=FIT_ONLY_DATASETS, omega_col="other",
+                                      scales=_shared.scales()),
             "omega_variant": build_tables(fc[fc.horizon == 24], FIXTURE_SCHEMA, REPRESENTATIVES,
                                           FAMILY_OF_MODEL, variants, fit_only_datasets=FIT_ONLY_DATASETS,
-                                          omega_variant="last_4096"),
+                                          omega_variant="last_4096", scales=_shared.scales()),
             "crps_method": _h24_tables(crps_method="uniform"),
         }
         for key, t in cases.items():

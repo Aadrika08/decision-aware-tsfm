@@ -35,6 +35,12 @@ Also here:
   make_roster_fixture() the fixture plus a third classical model, so the cache has
                         three classical candidates and one TSFM like the pilot
                         roster. Used by the representative selection (#41).
+  series_values()       the whole drawn series behind every fixture series, history
+                        before the first origin included.
+  make_fixture_scales() the scale table of every fixture series (scale.py: seasonal-
+                        naive MAE, season 24, of its values before its first origin,
+                        #29 item 7a), which the engine and the representatives need.
+  stated_scales()       a STATED scale table for hand-built caches with no history.
 """
 from __future__ import annotations
 
@@ -44,6 +50,7 @@ from scipy import stats
 
 from .cache_io import qcol
 from .metrics import TAU_GRID, crps_weights
+from .scale import STATUS_OK, scale_row, scale_table
 
 FIXTURE_SCHEMA = "canonical-v1"
 FAMILY_OF_MODEL = {"AutoETS": "classical", "SeasonalNaive": "classical", "Moirai-small": "tsfm"}
@@ -84,17 +91,47 @@ def _design_table() -> list[tuple[str, str, float, dict]]:
     return rows
 
 
+def _length() -> int:
+    return max(o + h - 1 for h, os in HORIZON_ORIGINS.items() for o in os) + 1
+
+
+def _cycle(need: int) -> np.ndarray:
+    return 10 + 3 * np.sin(2 * np.pi * np.arange(need) / 24)
+
+
+def _draw(seed: int, i: int, need: int) -> np.ndarray:
+    return _cycle(need) + np.random.default_rng(seed * 100_003 + i).standard_normal(need)
+
+
+def series_values(seed: int = 7) -> dict:
+    """{(dataset, config, series_id): y at positions 0 .. last target} for every fixture
+    series: the very draw make_fixture takes its targets from, history included."""
+    need = _length()
+    return {(ds, "H", sid): _draw(seed, i, need) for i, (ds, sid, _, _) in enumerate(_design_table())}
+
+
+def first_origin() -> int:
+    """The earliest origin of the fixture (every series has the same origins)."""
+    return min(o for os in HORIZON_ORIGINS.values() for o in os)
+
+
+def make_fixture_scales(seed: int = 7) -> pd.DataFrame:
+    """The scale table of every fixture series: seasonal-naive MAE (season 24) of its
+    values before the fixture's first origin. About 1.13 for every series (two N(0, 1)
+    draws a day apart; the daily cycle cancels), where mean |y| was about 10."""
+    h = first_origin()
+    return scale_table(scale_row(key, y, h) for key, y in series_values(seed).items())
+
+
 def make_fixture(seed: int = 7) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Returns (forecasts in canonical form, omega table, planted answers)."""
     taus = np.asarray(TAU_GRID)
     z = stats.norm.ppf(taus)
-    need = max(o + h - 1 for h, os in HORIZON_ORIGINS.items() for o in os) + 1
+    need = _length()
     parts, omega_rows = [], []
     for i, (ds, sid, om, fam) in enumerate(_design_table()):
-        rng = np.random.default_rng(seed * 100_003 + i)
-        t = np.arange(need)
-        mu = 10 + 3 * np.sin(2 * np.pi * t / 24)
-        y = mu + rng.standard_normal(need)
+        mu = _cycle(need)
+        y = _draw(seed, i, need)
         omega_rows.append(dict(dataset=ds, config="H", series_id=sid, omega_levels=om))
         models = {"AutoETS": fam["classical"], "Moirai-small": fam["tsfm"], "SeasonalNaive": SEASONAL_NAIVE}
         for h, origins in HORIZON_ORIGINS.items():
@@ -184,6 +221,20 @@ def flat_fixture_producer(origins=(48, 72), horizon: int = 24, seeds=(0, 1)) -> 
                     rows.append(r)
     fc = pd.DataFrame(rows)
     return to_producer_format(fc, FLAT_FAMILY_OF_MODEL)
+
+
+FLAT_SCALE = 1.0
+
+
+def stated_scales(frame: pd.DataFrame, scale: float = FLAT_SCALE) -> pd.DataFrame:
+    """A STATED scale table, not a computed one, for hand-built caches with no history
+    (the cache owner's flat fixture is y = 10 everywhere, so its seasonal-naive MAE would
+    be 0): every series of `frame` gets `scale`, with a history that ends at its first
+    origin. Scale 1 makes the scaled costs equal the raw ones. Tests only."""
+    first = frame.groupby(["dataset", "config", "series_id"], sort=True)["origin"].min()
+    return scale_table([dict(dataset=d, config=c, series_id=sid, scale=float(scale), status=STATUS_OK,
+                             history_start=0, history_end=int(o), n_pairs=0)
+                        for (d, c, sid), o in first.items()])
 
 
 def planted_answers() -> pd.DataFrame:
