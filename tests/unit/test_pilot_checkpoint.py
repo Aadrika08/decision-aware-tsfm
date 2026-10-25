@@ -1,5 +1,6 @@
 """Assert-based snapshot checks using synthetic files only; never reads the real cache."""
 import hashlib
+import datetime
 import importlib.util
 import io
 import json
@@ -8,7 +9,9 @@ from pathlib import Path
 import sys
 import tarfile
 import tempfile
+import textwrap
 import unittest
+from unittest.mock import patch
 
 sys.dont_write_bytecode = True
 spec = importlib.util.spec_from_file_location("snapshot", Path(__file__).parents[2] / "scripts/pilot_checkpoint.py")
@@ -141,6 +144,71 @@ class PilotCheckpointTest(unittest.TestCase):
                               "checks":["cumulative_updates","complete_log_prefixes","source_exclusions","symlinks",
                                         "slot_retention","renamed_download","sha_mismatch","receipt_atomic_last","unsafe_members",
                                         "member_hashes_and_counts","ack_matches_latest","ack_rejects_mismatch_or_regression"]}))
+
+class PilotCheckpointRelayTest(unittest.TestCase):
+    def relay(self):
+        workflow = (Path(__file__).parents[2] / ".github/workflows/pilot-l4-checkpoints.yml").read_text()
+        marker = "      - name: Queue the next checkpoint after the verified backup\n"
+        self.assertIn(marker, workflow, "A successful backup must schedule its successor")
+        step = workflow.split(marker, 1)[1].split("\n      - ", 1)[0]
+        self.assertIn("if: steps.expiry.outputs.active == 'true' && success()", step)
+        self.assertLess(workflow.index("Remove the temporary runner key"), workflow.index(marker))
+        self.assertIn("timeout-minutes: 45", workflow)
+        self.assertIn("cancel-in-progress: false", workflow)
+        self.assertIn("group: pilot-l4-checkpoints-20261025", workflow)
+        self.assertIn("cron: '7,27,47 * 25-27 10 *'", workflow)
+        self.assertNotIn("pull_request", workflow)
+        code = step.split("          python3 - <<'PY'\n", 1)[1].split("\n          PY", 1)[0]
+        return textwrap.dedent(code)
+
+    def run_relay(self, now, oversleep=0):
+        code = self.relay()
+        current = [now]
+        waits, calls = [], []
+        real_datetime = datetime.datetime
+
+        class Clock(real_datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return current[0]
+
+        def sleep(seconds):
+            waits.append(seconds)
+            current[0] += datetime.timedelta(seconds=seconds + oversleep)
+
+        with patch("datetime.datetime", Clock), patch("time.sleep", sleep), \
+             patch("subprocess.run", side_effect=lambda args, **kwargs: calls.append((args, kwargs))), \
+             patch.dict(os.environ, {"GITHUB_REPOSITORY": "Aadrika08/decision-aware-tsfm"}):
+            exec(compile(code, "checkpoint-relay", "exec"), {})
+        self.assertTrue(all(kwargs.get("check") is True for _, kwargs in calls))
+        return waits, [args for args, _ in calls]
+
+    def test_success_queues_one_main_run_after_twenty_minutes(self):
+        waits, calls = self.run_relay(datetime.datetime(2026, 10, 25, 17, tzinfo=datetime.timezone.utc))
+        self.assertEqual(waits, [1200])
+        self.assertEqual(calls, [["gh", "api", "--method", "POST",
+                                 "repos/Aadrika08/decision-aware-tsfm/actions/workflows/pilot-l4-checkpoints.yml/dispatches",
+                                 "-f", "ref=main"]])
+
+    def test_expired_relay_disables_without_dispatch(self):
+        waits, calls = self.run_relay(datetime.datetime(2026, 10, 27, 13, 38, tzinfo=datetime.timezone.utc))
+        self.assertEqual(waits, [])
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0][3], "PUT")
+        self.assertTrue(calls[0][4].endswith("/disable"))
+
+    def test_near_expiry_waits_only_until_deadline_then_disables(self):
+        waits, calls = self.run_relay(datetime.datetime(2026, 10, 27, 13, 33, tzinfo=datetime.timezone.utc))
+        self.assertEqual(waits, [300])
+        self.assertEqual(len(calls), 1)
+        self.assertTrue(calls[0][4].endswith("/disable"))
+
+    def test_delayed_wakeup_cannot_dispatch_after_expiry(self):
+        waits, calls = self.run_relay(datetime.datetime(2026, 10, 27, 13, 10, tzinfo=datetime.timezone.utc), oversleep=600)
+        self.assertEqual(waits, [1200])
+        self.assertEqual(len(calls), 1)
+        self.assertTrue(calls[0][4].endswith("/disable"))
+
 
 if __name__ == "__main__":
     unittest.main()
