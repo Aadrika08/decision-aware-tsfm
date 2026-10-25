@@ -36,8 +36,8 @@ with 2,663 series at 0.7509 / 0.0560. They should not be cited.
 - **Active series ($T \ge 1000$):** 8,761. $\Omega_{\text{levels}}$ is
   defined for 8,601, $\Omega_{\text{diffs}}$ for 8,613, and both for 8,591;
   the rest are undefined (flat or near-flat, see 0009).
-- **Mean $\Omega_{\text{levels}}$:** 0.5026
-- **Mean $\Omega_{\text{diffs}}$:** 0.1222
+- **Mean $\Omega_{\text{levels}}$:** 0.5026, over the 8,601 series where it is defined.
+- **Mean $\Omega_{\text{diffs}}$:** 0.1222, over the 8,613 series where it is defined.
 - **Mean predictability drop ($\Delta\Omega = \Omega_{\text{levels}} - \Omega_{\text{diffs}}$):** 0.3804 (median 0.3806), over the 8,591 series where both are defined.
 
 ### Categorical Breakdown
