@@ -21,4 +21,4 @@ jobs:
       - name: Compile repository Python files
         run: python -m compileall -q src scripts tests
       - name: Verify the stable package layout
-        run: python -m unittest tests.unit.test_package_layout -v
+        run: python -m unittest tests.unit.test_package_layout tests.unit.test_pilot_checkpoint -v

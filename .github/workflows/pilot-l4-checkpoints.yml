@@ -1,0 +1,77 @@
+name: Temporary L4 pilot checkpoints
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '7,27,47 * 25-27 10 *'
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: pilot-l4-checkpoints-20261025
+  cancel-in-progress: false
+
+jobs:
+  checkpoint:
+    if: github.repository == 'Aadrika08/decision-aware-tsfm'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PILOT_HOST: jupyter-amva-948b@44.211.167.78
+      PILOT_ROOT: /home/jupyter-amva-948b/tsfm-l4-20261025
+      PILOT_RELEASE: pilot-l4-checkpoints-2026-10-25
+    steps:
+      - name: Respect the absolute account expiry
+        id: expiry
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import datetime, os, subprocess
+          active = datetime.datetime.now(datetime.timezone.utc) < datetime.datetime(2026, 10, 27, 13, 38, tzinfo=datetime.timezone.utc)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
+              out.write(f'active={str(active).lower()}\n')
+          if not active:
+              subprocess.run(['gh', 'api', '-X', 'PUT', f"repos/{os.environ['GITHUB_REPOSITORY']}/actions/workflows/pilot-l4-checkpoints.yml/disable"], check=True)
+          PY
+      - uses: actions/checkout@v4
+        if: steps.expiry.outputs.active == 'true'
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        if: steps.expiry.outputs.active == 'true'
+        with:
+          python-version: '3.11'
+      - name: Configure the temporary SSH identity
+        if: steps.expiry.outputs.active == 'true'
+        env:
+          PILOT_SSH_KEY: ${{ secrets.TSFM_L4_SSH_KEY_20261025 }}
+        run: |
+          test -n "$PILOT_SSH_KEY"
+          umask 077
+          mkdir -p "$RUNNER_TEMP/pilot-ssh" "$RUNNER_TEMP/checkpoint" "$RUNNER_TEMP/readback"
+          printf '%s\n' "$PILOT_SSH_KEY" > "$RUNNER_TEMP/pilot-ssh/key"
+          printf '%s\n' '44.211.167.78 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIVTqeQMilEBaWnT3paSWzyiml41/QYlNel5+/DgstcZ' > "$RUNNER_TEMP/pilot-ssh/known_hosts"
+          printf 'Host pilot-l4\n  HostName 44.211.167.78\n  User jupyter-amva-948b\n  IdentityFile %s/pilot-ssh/key\n  UserKnownHostsFile %s/pilot-ssh/known_hosts\n  StrictHostKeyChecking yes\n  BatchMode yes\n  ConnectTimeout 20\n  ServerAliveInterval 15\n  ServerAliveCountMax 3\n' "$RUNNER_TEMP" "$RUNNER_TEMP" > "$RUNNER_TEMP/pilot-ssh/config"
+      - name: Capture and verify the checkpoint
+        if: steps.expiry.outputs.active == 'true'
+        run: |
+          slot=$((GITHUB_RUN_NUMBER % 2))
+          ssh -F "$RUNNER_TEMP/pilot-ssh/config" pilot-l4 "python3 '$PILOT_ROOT/operations/snapshot.py' create '$PILOT_ROOT' $slot" > "$RUNNER_TEMP/snapshot-command.json"
+          scp -F "$RUNNER_TEMP/pilot-ssh/config" "pilot-l4:$PILOT_ROOT/backups/snapshot-$slot.tar.gz" "$RUNNER_TEMP/checkpoint/checkpoint-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.tar.gz"
+          scp -F "$RUNNER_TEMP/pilot-ssh/config" "pilot-l4:$PILOT_ROOT/backups/snapshot-$slot.receipt.json" "$RUNNER_TEMP/checkpoint/checkpoint-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.receipt.json"
+          python scripts/pilot_checkpoint.py verify "$RUNNER_TEMP/checkpoint/checkpoint-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.tar.gz" "$RUNNER_TEMP/checkpoint/checkpoint-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.receipt.json"
+      - name: Publish, read back and acknowledge the cloud copy
+        if: steps.expiry.outputs.active == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "$PILOT_RELEASE" "$RUNNER_TEMP/checkpoint/"* --repo "$GITHUB_REPOSITORY"
+          gh release download "$PILOT_RELEASE" --repo "$GITHUB_REPOSITORY" --pattern "checkpoint-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.*" --dir "$RUNNER_TEMP/readback"
+          python scripts/pilot_checkpoint.py verify "$RUNNER_TEMP/readback/checkpoint-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.tar.gz" "$RUNNER_TEMP/readback/checkpoint-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.receipt.json" > "$RUNNER_TEMP/verified-receipt.json"
+          ssh -F "$RUNNER_TEMP/pilot-ssh/config" pilot-l4 "python3 '$PILOT_ROOT/operations/snapshot.py' ack '$PILOT_ROOT'" < "$RUNNER_TEMP/verified-receipt.json"
+      - name: Remove the temporary runner key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/pilot-ssh/key"
