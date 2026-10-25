@@ -1,0 +1,15 @@
+{
+  "status": "partial",
+  "verified_jobs": 575,
+  "missing_jobs": 21121,
+  "cohorts": 4,
+  "native_run_counts": {
+    "65373ea1dc8c47d8aa495470d531462b": 25,
+    "85bf54312e4747249f90a2dcce5169f1": 24,
+    "fb1f7fc7d5914bab9a44fcafcfde2eb9": 526
+  },
+  "published_partition_bytes": 9224341,
+  "model_packages_imported": false,
+  "production_cache_modified": false,
+  "inference_executed": false
+}

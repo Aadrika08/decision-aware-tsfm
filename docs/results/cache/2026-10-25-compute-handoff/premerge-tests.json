@@ -1,0 +1,67 @@
+{
+  "code_commit": "5c4bf3dfe26f7de7f75b7472db1b8a31c9fbe693",
+  "forecast_inference": false,
+  "suites": [
+    {
+      "suite": "producer",
+      "returncode": 0,
+      "seconds": 18.25,
+      "log": "artifacts/runs/compute-handoff-20261025/producer-premerge.log",
+      "collected": 104,
+      "skipped": 0,
+      "passed": 104
+    },
+    {
+      "suite": "decision",
+      "returncode": 0,
+      "seconds": 289.036,
+      "log": "artifacts/runs/compute-handoff-20261025/decision-premerge.log",
+      "collected": 317,
+      "skipped": 3,
+      "passed": 314
+    },
+    {
+      "suite": "experiments",
+      "returncode": 0,
+      "seconds": 27.426,
+      "log": "artifacts/runs/compute-handoff-20261025/experiments-premerge.log",
+      "collected": 170,
+      "skipped": 0,
+      "passed": 170
+    },
+    {
+      "suite": "e3",
+      "returncode": 0,
+      "seconds": 21.064,
+      "log": "artifacts/runs/compute-handoff-20261025/e3-premerge.log",
+      "collected": 107,
+      "skipped": 0,
+      "passed": 107
+    },
+    {
+      "suite": "k2",
+      "returncode": 0,
+      "seconds": 29.787,
+      "log": "artifacts/runs/compute-handoff-20261025/k2-premerge.log",
+      "collected": 184,
+      "skipped": 0,
+      "passed": 184
+    },
+    {
+      "suite": "omega",
+      "returncode": 0,
+      "seconds": 0.12,
+      "log": "artifacts/runs/compute-handoff-20261025/omega-premerge.log",
+      "collected": 18,
+      "skipped": 0,
+      "passed": 18
+    }
+  ],
+  "collected": 900,
+  "passed": 897,
+  "skipped": 3,
+  "limitations": [
+    "Three optional decision checks skipped: original handoff-bundle integration, real-workload scale integration, and comparison with a second Python interpreter (DECISION_HANDOFF_BUNDLE, SCALE_REAL_WORKLOAD, PILOT_OTHER_PYTHON were not supplied).",
+    "These fixture/unit checks do not qualify the new compute host or complete the real pilot."
+  ]
+}

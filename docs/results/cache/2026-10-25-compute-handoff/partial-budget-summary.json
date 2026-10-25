@@ -1,0 +1,110 @@
+{
+  "status": "partial",
+  "scope": "575 published primary jobs, not full pilot or final-study budget",
+  "jobs_planned": 21696,
+  "jobs_accounted": 575,
+  "jobs_missing": 21121,
+  "cohorts": [
+    {
+      "run_id": "65373ea1dc8c47d8aa495470d531462b",
+      "device": "cpu",
+      "measurement_hardware_label": "Linux-7.2.5-3-omarchy-x86_64-with-glibc2.44",
+      "jobs": 25,
+      "successful_job_components_seconds": {
+        "inference_seconds": 2438.211861405929,
+        "model_load_seconds": 0.5049826420145109,
+        "source_load_seconds": 0.052122542925644666,
+        "io_seconds": 0.4433415319654159
+      },
+      "base_resource_hours": 0.6775589744785652,
+      "proposed_allowance_resource_hours": 0.8130707693742781,
+      "published_partition_bytes": 396968
+    },
+    {
+      "run_id": "85bf54312e4747249f90a2dcce5169f1",
+      "device": "cpu",
+      "measurement_hardware_label": "Linux-7.2.5-3-omarchy-x86_64-with-glibc2.44",
+      "jobs": 18,
+      "successful_job_components_seconds": {
+        "inference_seconds": 445.5469128359691,
+        "model_load_seconds": 0.5459711360745132,
+        "source_load_seconds": 0.019823614158667624,
+        "io_seconds": 0.33465957309817895
+      },
+      "base_resource_hours": 0.12401315754425013,
+      "proposed_allowance_resource_hours": 0.14881578905310014,
+      "published_partition_bytes": 363338
+    },
+    {
+      "run_id": "85bf54312e4747249f90a2dcce5169f1",
+      "device": "cuda",
+      "measurement_hardware_label": "NVIDIA GeForce RTX 4050 Laptop GPU",
+      "jobs": 6,
+      "successful_job_components_seconds": {
+        "inference_seconds": 1.3137357030063868,
+        "model_load_seconds": 3.8021655589691363,
+        "source_load_seconds": 0.006441913021262735,
+        "io_seconds": 0.09675946598872542
+      },
+      "base_resource_hours": 0.0014497507336070864,
+      "proposed_allowance_resource_hours": 0.0017397008803285037,
+      "published_partition_bytes": 116547
+    },
+    {
+      "run_id": "fb1f7fc7d5914bab9a44fcafcfde2eb9",
+      "device": "cpu",
+      "measurement_hardware_label": "Linux-7.2.5-3-omarchy-x86_64-with-glibc2.44",
+      "jobs": 526,
+      "successful_job_components_seconds": {
+        "inference_seconds": 42020.16210612102,
+        "model_load_seconds": 1.0091843760455959,
+        "source_load_seconds": 1.7872559312963858,
+        "io_seconds": 144.44481625774642
+      },
+      "base_resource_hours": 11.713167600746141,
+      "proposed_allowance_resource_hours": 14.055801120895369,
+      "published_partition_bytes": 8347488
+    }
+  ],
+  "successful_job_resource_hours_by_device": {
+    "cpu": 12.514739732768957,
+    "cuda": 0.0014497507336070864
+  },
+  "proposed_allowance": {
+    "restart_fraction": 0.1,
+    "failure_fraction": 0.1,
+    "approval_status": "proposed scenario only"
+  },
+  "known_wrapper_reports": {
+    "first-measurement": {
+      "status": "complete",
+      "wall_seconds": 454.1865357030183,
+      "maximum_process_rss_kib": 1557468,
+      "source_sha256": "6d3032203c7f52da07f4fe93bf30ff844b787b6aaadbe674cd46282597d3e1c8"
+    },
+    "full-interruption": {
+      "status": "interrupted",
+      "wall_seconds": 196.11249038897222,
+      "maximum_process_rss_kib": null,
+      "source_sha256": "a7f6f1a5ffa8f39d26b8fe892a3f3670907342e7c95b08833a0622122021f50c"
+    },
+    "full-service-resume": {
+      "status": "interrupted",
+      "wall_seconds": 42260.670884513005,
+      "maximum_process_rss_kib": null,
+      "source_sha256": "e3c97a0728b0d65f1e435027dfd11484e0113b776b556eb190f72aea5edb5d37"
+    }
+  },
+  "unknown_oom_attempt": {
+    "run_id": "65373ea1dc8c47d8aa495470d531462b",
+    "wall_seconds": null,
+    "maximum_process_rss_kib": null
+  },
+  "limitations": [
+    "Resource hours sum job inference/loading/source/I/O durations; they are not measured CPU utilisation, integrated GPU occupancy or elapsed time.",
+    "Do not add wrapper wall time to job components; they overlap.",
+    "New-host throughput and costs, incomplete attempts and final full-pilot measurements remain unavailable.",
+    "Physical hardware evidence lives in preserved wrapper/preflight records; the CPU measurement label alone does not identify a physical machine."
+  ],
+  "inference_executed": false
+}
