@@ -1,0 +1,14 @@
+{
+  "status": "verified_partial_transfer",
+  "archive_sha256": "823c44d67eb155b9cf96e1c2dea270635b4ad29c288d83216b9f56394727437a",
+  "archive_bytes": 48498484,
+  "archive_members": 990,
+  "regular_files": 941,
+  "directories": 49,
+  "original_files_verified": 913,
+  "original_bytes_verified": 476641178,
+  "originals_unchanged": true,
+  "links_or_special_files": 0,
+  "duplicate_or_unsafe_paths": 0,
+  "inference_run": false
+}

@@ -1,0 +1,57 @@
+{
+  "cohort_budget_commands_passed": 8,
+  "full_gate_rejects_575_before_reading_jobs": true,
+  "models_imported": false,
+  "inference_executed": false,
+  "report_scope": "575-job partial preparation, not complete pilot budget",
+  "reports": [
+    {
+      "cohort": "65373ea1dc8c47d8aa495470d531462b-cpu-985e59604c04",
+      "scenario": "base",
+      "matched_jobs": 25,
+      "scope": "subset projection only; whole pilot is incomplete"
+    },
+    {
+      "cohort": "65373ea1dc8c47d8aa495470d531462b-cpu-985e59604c04",
+      "scenario": "proposed",
+      "matched_jobs": 25,
+      "scope": "subset projection only; whole pilot is incomplete"
+    },
+    {
+      "cohort": "85bf54312e4747249f90a2dcce5169f1-cpu-985e59604c04",
+      "scenario": "base",
+      "matched_jobs": 18,
+      "scope": "subset projection only; whole pilot is incomplete"
+    },
+    {
+      "cohort": "85bf54312e4747249f90a2dcce5169f1-cpu-985e59604c04",
+      "scenario": "proposed",
+      "matched_jobs": 18,
+      "scope": "subset projection only; whole pilot is incomplete"
+    },
+    {
+      "cohort": "85bf54312e4747249f90a2dcce5169f1-cuda-9d5f728a5d78",
+      "scenario": "base",
+      "matched_jobs": 6,
+      "scope": "subset projection only; whole pilot is incomplete"
+    },
+    {
+      "cohort": "85bf54312e4747249f90a2dcce5169f1-cuda-9d5f728a5d78",
+      "scenario": "proposed",
+      "matched_jobs": 6,
+      "scope": "subset projection only; whole pilot is incomplete"
+    },
+    {
+      "cohort": "fb1f7fc7d5914bab9a44fcafcfde2eb9-cpu-985e59604c04",
+      "scenario": "base",
+      "matched_jobs": 526,
+      "scope": "subset projection only; whole pilot is incomplete"
+    },
+    {
+      "cohort": "fb1f7fc7d5914bab9a44fcafcfde2eb9-cpu-985e59604c04",
+      "scenario": "proposed",
+      "matched_jobs": 526,
+      "scope": "subset projection only; whole pilot is incomplete"
+    }
+  ]
+}

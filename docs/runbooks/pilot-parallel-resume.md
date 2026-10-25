@@ -5,6 +5,10 @@ Pilot and final budget remain [#29](https://github.com/Aadrika08/decision-aware-
 and [#30](https://github.com/Aadrika08/decision-aware-tsfm/issues/30).
 This supplements [development-pilot.md](development-pilot.md) and the detailed
 fallback setup in [PR #65](https://github.com/Aadrika08/decision-aware-tsfm/pull/65).
+The verified partial transfer is now available in the
+[pilot-resume release](https://github.com/Aadrika08/decision-aware-tsfm/releases/tag/pilot-resume-2026-10-23).
+See the [25 October handoff record](../results/cache/2026-10-25-compute-handoff.md)
+for its download verification and the remaining evidence requirements.
 
 The original laptop run is stopped. The October 23 audit verifies **575 jobs**;
 21,121 remain missing, with zero corrupt/unexpected/duplicate partitions or
@@ -43,7 +47,7 @@ wrapper can differ and records its own hash. Do not install latest versions.
 ```bash
 git clone https://github.com/Aadrika08/decision-aware-tsfm.git
 cd decision-aware-tsfm
-git checkout --detach CODE_COMMIT_FROM_TRANSFER_MANIFEST
+git checkout --detach 1937c7ba11e045449ef5469685b405ab51da58f3
 uv python install 3.11.15
 uv venv --python 3.11.15 .venv
 uv pip sync --python .venv/bin/python --require-hashes requirements/qualification.txt
@@ -81,6 +85,9 @@ is needed. Qualification failures are retained; they do not pass admission.
 
 The transfer is labelled **partial paused pilot**, not a completed consumer
 handoff. It preserves the entire stopped run, original inputs and attempts.
+Download `pilot-resume-2026-10-23.tar.gz` and its `.sha256` file from the release.
+The archive must be 48,498,484 bytes with SHA-256
+`823c44d67eb155b9cf96e1c2dea270635b4ad29c288d83216b9f56394727437a`.
 Check the archive SHA-256 before extracting into a new directory. Set `PILOT_RUN`
 to the extracted `pilot-run` directory. Keep that directory fixed after relocation.
 The archive's `transport-sha256.json` maps relative file paths to exact hashes.
@@ -209,7 +216,8 @@ paths, old service names and old accounting assumptions. Observe this service
 directly, post job counts, and preserve all native events and raw measurements.
 No implicit reboot restart is configured; keep the host/session available.
 
-After generation: require the full 21,696-job audit, zero-generation completed
+After generation, follow the [portable closeout commands](pilot-closeout.md).
+Require the full 21,696-job audit, zero-generation completed
 rerun and disposable missing/corrupt recovery. Budget each measured hardware/attempt
 separately, retaining old unknown OOM costs and avoiding duplicate successful-job
 accounting. Publish the hashed complete bundle, then obtain both actual consumers'

@@ -1,0 +1,13 @@
+{
+  "status": "incomplete",
+  "planned_jobs": 21696,
+  "verified_jobs": 575,
+  "missing": 21121,
+  "corrupt": 0,
+  "unexpected": 0,
+  "duplicate": {},
+  "mismatched_actuals": 0,
+  "inference_run": false,
+  "exit_code": 2,
+  "seconds": 17.787
+}
