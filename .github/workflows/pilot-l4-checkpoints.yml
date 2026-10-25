@@ -17,7 +17,7 @@ jobs:
   checkpoint:
     if: github.repository == 'Aadrika08/decision-aware-tsfm'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 45
     env:
       PILOT_HOST: jupyter-amva-948b@44.211.167.78
       PILOT_ROOT: /home/jupyter-amva-948b/tsfm-l4-20261025
@@ -75,3 +75,20 @@ jobs:
       - name: Remove the temporary runner key
         if: always()
         run: rm -f "$RUNNER_TEMP/pilot-ssh/key"
+      - name: Queue the next checkpoint after the verified backup
+        if: steps.expiry.outputs.active == 'true' && success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import datetime, os, subprocess, time
+          expiry = datetime.datetime(2026, 10, 27, 13, 38, tzinfo=datetime.timezone.utc)
+          remaining = (expiry - datetime.datetime.now(datetime.timezone.utc)).total_seconds()
+          if remaining > 0:
+              time.sleep(min(1200, remaining))
+          workflow = f"repos/{os.environ['GITHUB_REPOSITORY']}/actions/workflows/pilot-l4-checkpoints.yml"
+          if datetime.datetime.now(datetime.timezone.utc) >= expiry:
+              subprocess.run(['gh', 'api', '--method', 'PUT', workflow + '/disable'], check=True)
+          else:
+              subprocess.run(['gh', 'api', '--method', 'POST', workflow + '/dispatches', '-f', 'ref=main'], check=True)
+          PY
