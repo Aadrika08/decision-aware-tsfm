@@ -25,13 +25,18 @@ recorded in docs/decisions/ before the real multi-series run.
 """
 import numpy as np
 
+# MIN_DISTINCT_OMEGA_THRESHOLD, ORIENTATIONS, validate_columns and
+# distinct_count live in common.py so this module and selector.py cannot drift
+# apart on them. They are re-exported here, so importing them from this module
+# keeps working.
+from decision_aware_tsfm.analysis.k3.common import (  # noqa: F401
+    MIN_DISTINCT_OMEGA_THRESHOLD, ORIENTATIONS, distinct_count, validate_columns)
+
 # scikit-learn is imported inside the two functions that use it, so importing
 # this package (and the loader and selector that import from it) does not
 # require scikit-learn to be installed. Only the monotone/flexible fit needs it.
 
-MIN_DISTINCT_OMEGA_THRESHOLD = 3
 MIN_DISTINCT_OMEGA_FLEXIBLE = 8
-ORIENTATIONS = ("classical_below", "tsfm_below")
 DIRECTIONS = ("increasing", "decreasing")
 
 
@@ -39,42 +44,6 @@ DIRECTIONS = ("increasing", "decreasing")
 def insufficient_data(reason, n_distinct_omega, required, unit="omega_value"):
     return {"status": "insufficient_data", "reason": reason, "unit": unit,
             "n_distinct_omega": int(n_distinct_omega), "required": int(required)}
-
-
-def distinct_count(omega, datasets=None):
-    """How many independent Omega points are available.
-
-    With dataset labels, count distinct datasets: many series from one dataset
-    share a source and are not independent evidence for a boundary (#32, Veer's
-    sign-off condition). Without labels, fall back to distinct Omega values and
-    say so in the reported unit.
-    """
-    if datasets is None:
-        return len(np.unique(np.asarray(omega))), "omega_value"
-    datasets = np.asarray(datasets)
-    if datasets.shape != np.asarray(omega).shape:
-        raise ValueError("datasets length must match omega")
-    return len(np.unique(datasets)), "dataset"
-
-
-def _as_1d_finite(name, values):
-    arr = np.asarray(values, dtype=np.float64)
-    if arr.ndim != 1:
-        raise ValueError(f"{name} must be one-dimensional, got shape {arr.shape}")
-    if not np.isfinite(arr).all():
-        raise ValueError(f"{name} contains non-finite values")
-    return arr
-
-
-def _validate(omega, *others):
-    omega = _as_1d_finite("omega", omega)
-    out = [omega]
-    for i, other in enumerate(others):
-        arr = _as_1d_finite(f"input_{i}", other)
-        if arr.shape != omega.shape:
-            raise ValueError(f"input_{i} length {len(arr)} != omega length {len(omega)}")
-        out.append(arr)
-    return out
 
 
 def _collapse_ties(omega, delta):
@@ -87,7 +56,7 @@ def _collapse_ties(omega, delta):
 # --------------------------------------------------------- 1. cost difference
 def family_cost_difference(cost_classical, cost_tsfm):
     """delta = cost_tsfm - cost_classical. Positive means classical is cheaper."""
-    c, t = _validate(cost_classical, cost_tsfm)
+    c, t = validate_columns(cost_classical, cost_tsfm)
     return t - c
 
 
@@ -100,7 +69,7 @@ def count_sign_reversals(omega, delta, datasets=None,
     cannot manufacture reversals. Exact zeros (a tie between families) are
     dropped rather than counted as a flip.
     """
-    omega, delta = _validate(omega, delta)
+    omega, delta = validate_columns(omega, delta)
     n_distinct, unit = distinct_count(omega, datasets)
     if n_distinct < min_distinct:
         return insufficient_data(f"too few distinct Omega {unit}s", n_distinct,
@@ -151,7 +120,7 @@ def fit_monotone_boundary(omega, delta, direction="both", datasets=None, groups=
     """
     if direction not in ("both", *DIRECTIONS):
         raise ValueError(f"direction must be 'both', 'increasing' or 'decreasing'")
-    omega, delta = _validate(omega, delta)
+    omega, delta = validate_columns(omega, delta)
     if groups is not None:
         groups = np.asarray(groups)
         if groups.shape != omega.shape:
@@ -221,7 +190,7 @@ def oracle_value_best_threshold(omega, cost_classical, cost_tsfm, datasets=None,
     """
     if baseline not in ("best_fixed", "worst_fixed"):
         raise ValueError("baseline must be 'best_fixed' or 'worst_fixed'")
-    omega, c, t = _validate(omega, cost_classical, cost_tsfm)
+    omega, c, t = validate_columns(omega, cost_classical, cost_tsfm)
     n_distinct, unit = distinct_count(omega, datasets)
     if n_distinct < min_distinct:
         return insufficient_data(f"too few distinct Omega {unit}s", n_distinct,
