@@ -4,6 +4,11 @@
 - Owner: Dayson Du
 - Issue: https://github.com/Aadrika08/decision-aware-tsfm/issues/1
 - Status: accepted, merged into `main` via PR #11
+- Note (2026-10-24): the counts, file names and the flat 168-step trim
+  below are historical. The trim was replaced by 0004, and the current
+  manifest is manifest-v2 (0009): 8,761 active series, files under
+  `artifacts/reference/manifests/`, produced by
+  `scripts/stage0prep_fixed_v2.py`.
 
 ## Decision
 
