@@ -1,0 +1,14 @@
+{
+  "source_files_hash_verified": 55,
+  "canonical_job_ids_preserved": 21696,
+  "original_plan_bytes_unchanged": true,
+  "saved_partitions_verified_after_relocation": 575,
+  "missing": 21121,
+  "anomaly_counts": {
+    "corrupt": 0,
+    "unexpected": 0,
+    "duplicate": 0,
+    "mismatched_actuals": 0
+  },
+  "scope": "Source-path-only relocation in the exact qualified environment; no inference."
+}

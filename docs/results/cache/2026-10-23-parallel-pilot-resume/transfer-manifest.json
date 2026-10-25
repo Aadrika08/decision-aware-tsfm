@@ -1,0 +1,20 @@
+{
+  "status": "partial_paused_pilot",
+  "code_commit": "1937c7ba11e045449ef5469685b405ab51da58f3",
+  "code_branch": "feat/71-measured-cpu-workers",
+  "jobs_saved": 575,
+  "jobs_planned": 21696,
+  "rows_planned": 1395776,
+  "source_arrays": 55,
+  "original_files": 913,
+  "original_bytes": 476641178,
+  "original_plan_sha256": "84b29c6fd892da6375cdc7802215558c4e14e30bead8b9cf52657a7103f24d18",
+  "implementation_sha256": "5aa32a3436d5a9cc3ac93d79f1f9892dc6db1969d932bfa33ade0aac07967e36",
+  "environment_sha256": "86d8741605a3e5f29262eb6bdbadae072285a5935f0255c685c659a9d546f8fe",
+  "limitations": [
+    "Not a complete consumer cache or accepted full budget.",
+    "Original stopped-run files and all attempts are retained; .writer.lock excluded.",
+    "Use the runbook, not old host-specific launchers.",
+    "Remote host and representative throughput remain unmeasured."
+  ]
+}

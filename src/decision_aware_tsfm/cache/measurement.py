@@ -1,4 +1,4 @@
-"""Measure one-worker cache generation on Linux without changing the planned experiment."""
+"""Measure cache generation on Linux without changing the planned experiment."""
 import argparse
 import csv
 from datetime import datetime, timezone
@@ -60,8 +60,10 @@ def _gpu_summary(path):
     return devices
 
 
-def measure(plan_file, cache, output_directory, *, real=False):
+def measure(plan_file, cache, output_directory, *, real=False, workers=1):
     """Persist logs and measurements; never treat fixture measurements as real evidence."""
+    if isinstance(workers, bool) or not isinstance(workers, int) or workers < 1:
+        raise ValueError("workers must be a positive integer")
     if sys.platform != "linux":
         raise ValueError("Pilot resource measurement requires Linux")
     plan_file, cache, output = (Path(path).resolve() for path in
@@ -94,12 +96,13 @@ def measure(plan_file, cache, output_directory, *, real=False):
         environment.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
     command = ["/usr/bin/time", "-v", "-o", str(output / "time.txt"), sys.executable,
         str(root / "scripts/forecast_cache.py"), "generate", "--plan-file", str(output / "plan.json"),
-        "--cache", str(cache), "--workers", "1", "--output", str(output / "generation.json")]
+        "--cache", str(cache), "--workers", str(workers), "--output", str(output / "generation.json")]
     if real:
         command.append("--real")
     report = {"status": "incomplete", "evidence_kind": "fixture" if planned["fixture"] else "real_pilot",
         "wrapper_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         "generation_exit_code": None, "generation_status": "not_started", "command": command,
+        "cpu_workers": workers,
         "cwd": str(root), "plan_file": str(plan_file),
         "plan_sha256": hashlib.sha256(encoded.encode()).hexdigest(),
         "environment": {key: environment[key] for key in (
@@ -217,9 +220,11 @@ def main(argv=None):
     parser.add_argument("--cache", required=True, type=Path)
     parser.add_argument("--output-directory", required=True, type=Path)
     parser.add_argument("--real", action="store_true")
+    parser.add_argument("--workers", type=int, default=1, help="Bounded CPU worker count")
     args = parser.parse_args(argv)
     try:
-        result = measure(args.plan_file, args.cache, args.output_directory, real=args.real)
+        result = measure(args.plan_file, args.cache, args.output_directory,
+                         real=args.real, workers=args.workers)
     except (ValueError, OSError, KeyError, TypeError) as error:
         print(f"measure-pilot: {error}", file=sys.stderr)
         return 2
