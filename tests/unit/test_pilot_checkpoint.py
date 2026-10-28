@@ -155,8 +155,8 @@ class PilotCheckpointRelayTest(unittest.TestCase):
         self.assertLess(workflow.index("Remove the temporary runner key"), workflow.index(marker))
         self.assertIn("timeout-minutes: 45", workflow)
         self.assertIn("cancel-in-progress: false", workflow)
-        self.assertIn("group: pilot-l4-checkpoints-20261025", workflow)
-        self.assertIn("cron: '7,27,47 * 25-27 10 *'", workflow)
+        self.assertIn("group: pilot-l4-checkpoints-20261029", workflow)
+        self.assertIn("cron: '7,27,47 * 28-29 10 *'", workflow)
         self.assertNotIn("pull_request", workflow)
         code = step.split("          python3 - <<'PY'\n", 1)[1].split("\n          PY", 1)[0]
         return textwrap.dedent(code)
@@ -184,27 +184,27 @@ class PilotCheckpointRelayTest(unittest.TestCase):
         return waits, [args for args, _ in calls]
 
     def test_success_queues_one_main_run_after_twenty_minutes(self):
-        waits, calls = self.run_relay(datetime.datetime(2026, 10, 25, 17, tzinfo=datetime.timezone.utc))
+        waits, calls = self.run_relay(datetime.datetime(2026, 10, 28, 17, tzinfo=datetime.timezone.utc))
         self.assertEqual(waits, [1200])
         self.assertEqual(calls, [["gh", "api", "--method", "POST",
                                  "repos/Aadrika08/decision-aware-tsfm/actions/workflows/pilot-l4-checkpoints.yml/dispatches",
                                  "-f", "ref=main"]])
 
     def test_expired_relay_disables_without_dispatch(self):
-        waits, calls = self.run_relay(datetime.datetime(2026, 10, 27, 13, 38, tzinfo=datetime.timezone.utc))
+        waits, calls = self.run_relay(datetime.datetime(2026, 10, 29, 16, 33, tzinfo=datetime.timezone.utc))
         self.assertEqual(waits, [])
         self.assertEqual(len(calls), 1)
         self.assertEqual(calls[0][3], "PUT")
         self.assertTrue(calls[0][4].endswith("/disable"))
 
     def test_near_expiry_waits_only_until_deadline_then_disables(self):
-        waits, calls = self.run_relay(datetime.datetime(2026, 10, 27, 13, 33, tzinfo=datetime.timezone.utc))
+        waits, calls = self.run_relay(datetime.datetime(2026, 10, 29, 16, 28, tzinfo=datetime.timezone.utc))
         self.assertEqual(waits, [300])
         self.assertEqual(len(calls), 1)
         self.assertTrue(calls[0][4].endswith("/disable"))
 
     def test_delayed_wakeup_cannot_dispatch_after_expiry(self):
-        waits, calls = self.run_relay(datetime.datetime(2026, 10, 27, 13, 10, tzinfo=datetime.timezone.utc), oversleep=600)
+        waits, calls = self.run_relay(datetime.datetime(2026, 10, 29, 16, 5, tzinfo=datetime.timezone.utc), oversleep=600)
         self.assertEqual(waits, [1200])
         self.assertEqual(len(calls), 1)
         self.assertTrue(calls[0][4].endswith("/disable"))
