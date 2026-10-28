@@ -3,14 +3,14 @@ name: Temporary L4 pilot checkpoints
 on:
   workflow_dispatch:
   schedule:
-    - cron: '7,27,47 * 25-27 10 *'
+    - cron: '7,27,47 * 28-29 10 *'
 
 permissions:
   contents: write
   actions: write
 
 concurrency:
-  group: pilot-l4-checkpoints-20261025
+  group: pilot-l4-checkpoints-20261029
   cancel-in-progress: false
 
 jobs:
@@ -19,9 +19,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
-      PILOT_HOST: jupyter-amva-948b@44.211.167.78
-      PILOT_ROOT: /home/jupyter-amva-948b/tsfm-l4-20261025
-      PILOT_RELEASE: pilot-l4-checkpoints-2026-10-25
+      PILOT_HOST: jupyter-amva-2cbf@44.211.167.78
+      PILOT_ROOT: /home/jupyter-amva-2cbf/tsfm-l4-20261029
+      PILOT_RELEASE: pilot-l4-checkpoints-2026-10-29
     steps:
       - name: Respect the absolute account expiry
         id: expiry
@@ -30,7 +30,7 @@ jobs:
         run: |
           python3 - <<'PY'
           import datetime, os, subprocess
-          active = datetime.datetime.now(datetime.timezone.utc) < datetime.datetime(2026, 10, 27, 13, 38, tzinfo=datetime.timezone.utc)
+          active = datetime.datetime.now(datetime.timezone.utc) < datetime.datetime(2026, 10, 29, 16, 33, tzinfo=datetime.timezone.utc)
           with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
               out.write(f'active={str(active).lower()}\n')
           if not active:
@@ -47,14 +47,14 @@ jobs:
       - name: Configure the temporary SSH identity
         if: steps.expiry.outputs.active == 'true'
         env:
-          PILOT_SSH_KEY: ${{ secrets.TSFM_L4_SSH_KEY_20261025 }}
+          PILOT_SSH_KEY: ${{ secrets.TSFM_L4_SSH_KEY_20261029 }}
         run: |
           test -n "$PILOT_SSH_KEY"
           umask 077
           mkdir -p "$RUNNER_TEMP/pilot-ssh" "$RUNNER_TEMP/checkpoint" "$RUNNER_TEMP/readback"
           printf '%s\n' "$PILOT_SSH_KEY" > "$RUNNER_TEMP/pilot-ssh/key"
           printf '%s\n' '44.211.167.78 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIVTqeQMilEBaWnT3paSWzyiml41/QYlNel5+/DgstcZ' > "$RUNNER_TEMP/pilot-ssh/known_hosts"
-          printf 'Host pilot-l4\n  HostName 44.211.167.78\n  User jupyter-amva-948b\n  IdentityFile %s/pilot-ssh/key\n  UserKnownHostsFile %s/pilot-ssh/known_hosts\n  StrictHostKeyChecking yes\n  BatchMode yes\n  ConnectTimeout 20\n  ServerAliveInterval 15\n  ServerAliveCountMax 3\n' "$RUNNER_TEMP" "$RUNNER_TEMP" > "$RUNNER_TEMP/pilot-ssh/config"
+          printf 'Host pilot-l4\n  HostName 44.211.167.78\n  User jupyter-amva-2cbf\n  IdentityFile %s/pilot-ssh/key\n  UserKnownHostsFile %s/pilot-ssh/known_hosts\n  StrictHostKeyChecking yes\n  BatchMode yes\n  ConnectTimeout 20\n  ServerAliveInterval 15\n  ServerAliveCountMax 3\n' "$RUNNER_TEMP" "$RUNNER_TEMP" > "$RUNNER_TEMP/pilot-ssh/config"
       - name: Capture and verify the checkpoint
         if: steps.expiry.outputs.active == 'true'
         run: |
@@ -82,7 +82,7 @@ jobs:
         run: |
           python3 - <<'PY'
           import datetime, os, subprocess, time
-          expiry = datetime.datetime(2026, 10, 27, 13, 38, tzinfo=datetime.timezone.utc)
+          expiry = datetime.datetime(2026, 10, 29, 16, 33, tzinfo=datetime.timezone.utc)
           remaining = (expiry - datetime.datetime.now(datetime.timezone.utc)).total_seconds()
           if remaining > 0:
               time.sleep(min(1200, remaining))
