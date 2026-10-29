@@ -21,6 +21,8 @@ Download both `pilot-full-*-l4-20261029.tar.gz` archives and `SHA256SUMS-full`.
   and all 21,696 primary partitions.
 - `independent-audit.json` and `independent-verification.json` record an additional
   restore and audit on a separate filesystem using the same scientific source.
+- `publication-readback.json` records a fresh GitHub download of all nine
+  archive/report/checksum assets, matching local hashes and GitHub asset digests.
 
 The evidence archive retains original inputs, prior attempts, native logs,
 qualification, hardware records, relocation proof, all closeout checks, budgets,
@@ -133,11 +135,50 @@ separately before making a full-study compute commitment.
 ## Owner handoff
 
 Use the [consumer acceptance checklist](2026-10-15-real-pilot/consumer-acceptance.md)
-with this release and the actual reader revisions; its historical October 15
-download names must be replaced. The exact producer probe scripts and their raw
-outputs are included under
+for the required assertions and attestation fields. Its October 15 download names
+and producer revision are historical; use the commands below for this release.
+The exact producer probe scripts and their raw outputs are included under
 `full-evidence/operations/new-grant-20261029/` and
 `full-evidence/closeout-resume-3-new-grant/consumer-probes/`.
+
+Set `PRODUCER` and `K3` to clean checkouts at the recorded revisions, and `PY` to
+an existing environment with the versions above. These commands only read saved
+forecasts. Record any owner-agreed revision change instead of silently replacing
+the pins. Run each owner's reader separately and retain its actual exit status.
+
+```bash
+set -eu
+test "$(git -C "$PRODUCER" rev-parse HEAD)" = 1937c7ba11e045449ef5469685b405ab51da58f3
+test -z "$(git -C "$PRODUCER" status --porcelain)"
+test "$(git -C "$K3" rev-parse HEAD)" = e3b7e17e54e94439fc78a38057273473e6bc7985
+test -z "$(git -C "$K3" status --porcelain)"
+mkdir pilot-full-acceptance-20261029
+cd pilot-full-acceptance-20261029
+gh release download pilot-full-2026-10-29 --repo Aadrika08/decision-aware-tsfm \
+  --pattern 'pilot-full-*-l4-20261029.tar.gz' --pattern SHA256SUMS-full
+sha256sum --check SHA256SUMS-full
+tar -xzf pilot-full-bundle-l4-20261029.tar.gz
+tar -xzf pilot-full-evidence-l4-20261029.tar.gz
+export BUNDLE="$PWD/full-bundle"
+export PROBES="$PWD/full-evidence/operations/new-grant-20261029"
+export PYTHONDONTWRITEBYTECODE=1
+sha256sum "$BUNDLE/handoff.json"
+"$PY" -c 'import platform, importlib.metadata as m; print(platform.python_version()); print({p: m.version(p) for p in ("numpy", "pandas", "pyarrow", "scipy")})'
+```
+
+Veer's reader:
+
+```bash
+PYTHONPATH="$PRODUCER/src" /usr/bin/time -v -o decision.time.txt \
+  "$PY" -u "$PROBES/probe_decision.py" > decision.jsonl 2> decision.stderr.log
+```
+
+Abdullah's reader (the producer's 900-second attempt did not complete):
+
+```bash
+PYTHONPATH="$K3/src" /usr/bin/time -v -o k3.time.txt \
+  "$PY" -u "$PROBES/probe_k3.py" > k3.jsonl 2> k3.stderr.log
+```
 
 Veer and Abdullah each need to record on #29 the same two archive hashes and
 handoff hash, their clean consumer revision, environment, exact commands and
