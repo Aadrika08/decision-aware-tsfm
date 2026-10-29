@@ -12,7 +12,9 @@ from pathlib import Path
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from decision_aware_tsfm.analysis.k3.loader import K3InputError, load_k3_inputs
+from decision_aware_tsfm.analysis.k3.loader import (
+    K3InputError, join_omega, load_cache, load_k3_inputs, load_omega,
+)
 from decision_aware_tsfm.cache.schema import QCOLS, SCHEMA, decision_fixture
 
 REV = "fixture-revision"
@@ -122,6 +124,59 @@ class HappyPathsTests(LoaderTestCase):
         _, _, report = run(self.tmp, hashes, doc, allow_fixture=True)
         self.assertTrue(report["status"] == "fixture_valid")
         self.assertTrue(report["distinct_omega"] == 1)
+
+
+class ProvenanceLookupTests(LoaderTestCase):
+    def inputs(self):
+        table, metadata, _ = load_cache(self.tmp, build_cache(self.tmp))
+        source_hashes = {"s0": "a" * 64, "s1": "b" * 64, "s2": "c" * 64}
+        doc = omega_doc()
+        for row in doc["rows"]:
+            row["source_sha256"] = source_hashes[row["series_id"]]
+        for job_id, job in metadata.items():
+            job["source_sha256"] = source_hashes[job_id.split(":")[0]]
+        path = self.tmp / "omega.json"
+        path.write_text(json.dumps(doc))
+        # Separate each job's two rows and change which job appears first.
+        table = table.take([11, 0, 9, 2, 7, 4, 5, 6, 3, 8, 1, 10])
+        return table, metadata, load_omega(path)
+
+    def test_reordered_discontiguous_jobs_keep_their_own_source_identity(self):
+        table, metadata, omega = self.inputs()
+        joined, report = join_omega(table, metadata, omega, "current")
+        self.assertEqual(joined, {
+            ("synthetic", "hourly", "s0", 5000): 0.2,
+            ("synthetic", "hourly", "s1", 5000): 0.5,
+            ("synthetic", "hourly", "s2", 5000): 0.8,
+        })
+        self.assertEqual(report["provenance_checked_jobs"], 6)
+
+    def test_source_mismatch_on_the_last_job_is_still_rejected(self):
+        table, metadata, omega = self.inputs()
+        metadata[next(reversed(metadata))]["source_sha256"] = "f" * 64
+        with self.assertRaisesRegex(K3InputError, "different source revision"):
+            join_omega(table, metadata, omega, "current")
+
+    def test_provenance_lookup_bounds_full_table_filter_work(self):
+        table, metadata, omega = self.inputs()
+
+        class CountedTable:
+            """Run real Arrow filters while measuring their input-row volume."""
+            filtered_rows = 0
+
+            def __getitem__(self, name):
+                return table[name]
+
+            def filter(self, mask):
+                self.filtered_rows += len(table)
+                return table.filter(mask)
+
+        counted = CountedTable()
+        joined, report = join_omega(counted, metadata, omega, "current")
+        self.assertEqual(len(joined), 3)
+        self.assertEqual(report["provenance_checked_jobs"], 6)
+        # A pass over the cache is bounded work; a complete scan per job is not.
+        self.assertLessEqual(counted.filtered_rows, 2 * len(table))
 
 
 class RejectionRulesTests(LoaderTestCase):

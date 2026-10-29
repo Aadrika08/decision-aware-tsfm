@@ -43,7 +43,6 @@ from pathlib import Path
 
 import numpy as np
 import pyarrow as pa
-import pyarrow.compute as pc
 import pyarrow.parquet as pq
 
 from decision_aware_tsfm.cache.schema import TAUS, validate_payload
@@ -253,9 +252,16 @@ def join_omega(table, job_meta, omega, variant, require_provenance=True):
     if missing:
         _fail("Cache series/origins with no Omega row", missing)
 
+    # validate_payload already checks identity consistency within every job.
+    # Index its first row once, including when rows are interleaved, instead of
+    # scanning the complete multi-partition table for each provenance lookup.
+    first_row_by_job = {}
+    for index, job_id in enumerate(table["job_id"].to_pylist()):
+        first_row_by_job.setdefault(job_id, index)
+
     if require_provenance:
         unprovenanced = sorted(
-            job_id for job_id in set(table["job_id"].to_pylist())
+            job_id for job_id in first_row_by_job
             if "source_revision" not in job_meta.get(job_id, {})
             or "source_sha256" not in job_meta.get(job_id, {}))
         if unprovenanced:
@@ -266,8 +272,8 @@ def join_omega(table, job_meta, omega, variant, require_provenance=True):
     for job_id, job in job_meta.items():
         if "source_revision" not in job or "source_sha256" not in job:
             continue
-        rows = table.filter(pc.equal(table["job_id"], job_id))
-        key = tuple(rows[k][0].as_py() for k in OMEGA_KEY)
+        index = first_row_by_job[job_id]
+        key = tuple(table[k][index].as_py() for k in OMEGA_KEY)
         ref = omega["by_source"][key][variant]
         checked += 1
         if (ref["source_revision"], ref["source_sha256"]) != (job["source_revision"], job["source_sha256"]):

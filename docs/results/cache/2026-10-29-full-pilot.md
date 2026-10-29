@@ -4,9 +4,12 @@ Owner: Aadrika. References: #29, #30; parent #16.
 
 **All approved forecasts are complete. Consumer-owner acceptance is pending.**
 The cache contains 21,696 verified jobs and 1,395,776 forecast rows. The decision
-reader passed producer checks for both Omega variants. The K3 reader reached a
-900-second operational timeout without returning its final report; this is an
-incomplete consumer check, not an invalid-cache finding.
+reader passed producer checks for both Omega variants. At initial publication,
+the K3 reader reached a 900-second operational timeout without returning its
+final report; that observation is retained below. The subsequent
+[K3 verification](2026-10-29-k3-full-cache-verification.md) fixes the repeated
+provenance scans and passes both variants on this same cache. Use the updated
+K3 handoff instructions below; consumer-owner acceptance is still pending.
 
 ## Download and identity
 
@@ -150,7 +153,7 @@ the pins. Run each owner's reader separately and retain its actual exit status.
 set -eu
 test "$(git -C "$PRODUCER" rev-parse HEAD)" = 1937c7ba11e045449ef5469685b405ab51da58f3
 test -z "$(git -C "$PRODUCER" status --porcelain)"
-test "$(git -C "$K3" rev-parse HEAD)" = e3b7e17e54e94439fc78a38057273473e6bc7985
+test "$(git -C "$K3" rev-parse HEAD)" = 2890ab02f8daef591baa55a2f4febb573fcfcb5b
 test -z "$(git -C "$K3" status --porcelain)"
 mkdir pilot-full-acceptance-20261029
 cd pilot-full-acceptance-20261029
@@ -173,17 +176,17 @@ PYTHONPATH="$PRODUCER/src" /usr/bin/time -v -o decision.time.txt \
   "$PY" -u "$PROBES/probe_decision.py" > decision.jsonl 2> decision.stderr.log
 ```
 
-Abdullah's reader (the producer's 900-second attempt did not complete):
-
-```bash
-PYTHONPATH="$K3/src" /usr/bin/time -v -o k3.time.txt \
-  "$PY" -u "$PROBES/probe_k3.py" > k3.jsonl 2> k3.stderr.log
-```
+For Abdullah's reader, use the guarded invocation in the
+[K3 verification supplement](2026-10-29-k3-full-cache-verification.md), whose
+embedded README specifies download verification, memory admission, thread limits
+and the 900-second bound. It uses the same original probe with clean source
+`2890ab02f8daef591baa55a2f4febb573fcfcb5b`. The producer's complete two-variant
+check now passes in 94.37 seconds on the laptop CPU; the original reader's
+timeout above remains historical evidence.
 
 Veer and Abdullah each need to record on #29 the same two archive hashes and
 handoff hash, their clean consumer revision, environment, exact commands and
 exit statuses, both Omega-variant reports, and explicit acceptance or rejection.
-Abdullah's full-cache check also needs the timeout resolved or a completed run
-with its actual resource usage recorded. Producer results do not supply those
-attestations. #29 and parent #16 remain open; #30's published evidence is ready
-for review with the stated accounting and final-study coverage limits.
+Producer results do not supply those attestations. #29 and parent #16 remain
+open. The bounded pilot accounting was reviewed and #30 closed through #80;
+the stated historical accounting gaps and final-study coverage limits remain.
